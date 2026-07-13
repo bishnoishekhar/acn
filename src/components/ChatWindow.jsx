@@ -1,0 +1,370 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { initGecx, resetGecx, gecxSend, setResponseHandler } from './gecx';
+import ComboCard from './ComboCard';
+import Carousel from './Carousel';
+
+function stripMarkdown(text) {
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/^#{1,3}\s+/gm, '')
+    .trim();
+}
+
+/* ── Message types ── */
+// { type: 'user' | 'bot' | 'typing', text, id }
+// { type: 'combo', heading, actions, id }
+
+let _idCounter = 0;
+const uid = () => ++_idCounter;
+
+export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
+  const [messages, setMessages] = useState([]);
+  const [inputVal, setInputVal] = useState('');
+  const [carousel, setCarousel] = useState(null);
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [sessionStarted, setSessionStarted] = useState(false);
+  const msgsRef = useRef(null);
+  const inputRef = useRef(null);
+  const recognitionRef = useRef(null);
+
+  /* ── Scroll to bottom ── */
+  const scrollToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      if (msgsRef.current) {
+        msgsRef.current.scrollTop = msgsRef.current.scrollHeight;
+      }
+    });
+    // Double-fire after 100ms for late-rendering tiles
+    setTimeout(() => {
+      if (msgsRef.current) {
+        msgsRef.current.scrollTop = msgsRef.current.scrollHeight;
+      }
+    }, 100);
+  }, []);
+
+  /* ── Add messages ── */
+  const addBot = useCallback((text) => {
+    const clean = stripMarkdown(text);
+    if (!clean) return;
+    setMessages((prev) => [...prev, { type: 'bot', text: clean, id: uid() }]);
+  }, []);
+
+  const addUser = useCallback((text) => {
+    setMessages((prev) => [...prev, { type: 'user', text, id: uid() }]);
+  }, []);
+
+  const showTyping = useCallback(() => {
+    setMessages((prev) => {
+      const filtered = prev.filter((m) => m.type !== 'typing');
+      return [...filtered, { type: 'typing', id: uid() }];
+    });
+  }, []);
+
+  const removeTyping = useCallback(() => {
+    setMessages((prev) => prev.filter((m) => m.type !== 'typing'));
+  }, []);
+
+  /* ── Parse Gemini 2.5 tool_code format ── */
+  const parseToolCode = useCallback((text) => {
+    // Gemini 2.5 sometimes outputs: tool_code: print(default_api.quick_actions(...))
+    if (!text.includes('tool_code') && !text.includes('default_api.quick_actions')) return null;
+    try {
+      const actions = [];
+      // Match content/description/utterance pattern
+      const re = /content='([^']+)'[^)]*description='([^']+)'[^)]*utterance='([^']+)'/g;
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        actions.push({ content: m[1].trim(), description: m[2].trim(), utterance: m[3].trim() });
+      }
+      // Also try double quotes
+      const re2 = /content="([^"]+)"[^)]*description="([^"]+)"[^)]*utterance="([^"]+)"/g;
+      while ((m = re2.exec(text)) !== null) {
+        actions.push({ content: m[1].trim(), description: m[2].trim(), utterance: m[3].trim() });
+      }
+      // Extract summary
+      const sumM = text.match(/summary=['"]([^'"]+)['"]/);
+      const summary = sumM ? sumM[1] : 'What can I help you with?';
+      return actions.length > 0 ? { actions, summary } : null;
+    } catch (e) { return null; }
+  }, []);
+  const showCombo = useCallback((actions, summary) => {
+    setMessages((prev) => {
+      const lastBotIdx = [...prev].reverse().findIndex((m) => m.type === 'bot');
+      if (lastBotIdx !== -1) {
+        const realIdx = prev.length - 1 - lastBotIdx;
+        const heading = prev[realIdx].text;
+        const without = prev.filter((_, i) => i !== realIdx);
+        return [...without, { type: 'combo', heading, actions, id: uid() }];
+      }
+      return [...prev, { type: 'combo', heading: summary || 'How would you like to proceed?', actions, id: uid() }];
+    });
+  }, []);
+
+  /* ── Process GECX outputs ── */
+  const processOutputs = useCallback((outputs) => {
+    removeTyping();
+    outputs.forEach((output) => {
+      if (output.text) {
+        const text = output.text;
+        /* Fallback: Gemini 2.5 tool_code format */
+        const toolCode = parseToolCode(text);
+        if (toolCode) {
+          showCombo(toolCode.actions, toolCode.summary);
+          return;
+        }
+        /* Fallback: Gemini narrated quick_actions as raw text */
+        if (text.includes('quick_actions') && text.includes('content:') && text.includes('utterance:')) {
+          const actions = [];
+          const re = /content:\s*["']?([^,}"'\n]+?)["']?\s*,\s*description:\s*["']?([^,}"'\n]+?)["']?\s*,\s*utterance:\s*["']?([^}"'\n\]]+?)["']?\s*\}/g;
+          let m;
+          while ((m = re.exec(text)) !== null) {
+            actions.push({ content: m[1].trim(), description: m[2].trim(), utterance: m[3].trim() });
+          }
+          const summaryM = text.match(/summary:\s*["']?([^,}"'\]\n]+?)["']?\s*[,}]/);
+          const summary = summaryM ? summaryM[1].trim() : 'What can I help you with?';
+          if (actions.length > 0) { showCombo(actions, summary); return; }
+        }
+        addBot(text);
+      }
+      if (output.payload) {
+        const p = output.payload;
+        if (p.type === 'quick_actions' && p.actions) {
+          showCombo(p.actions, p.summary);
+        }
+        if (p.name === 'acn-payment-carousel') {
+          setCarousel(p);
+        }
+      }
+    });
+  }, [removeTyping, addBot, showCombo]);
+
+  /* ── Register response handler once ── */
+  useEffect(() => {
+    setResponseHandler(processOutputs);
+  }, [processOutputs]);
+
+  /* ── Scroll after every message change ── */
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
+
+  /* ── Start session when chat opens ── */
+  useEffect(() => {
+    if (!isOpen) return;
+    if (intent) {
+      // Opened from a product card with a pre-set intent
+      setTimeout(() => {
+        addUser(intent);
+        showTyping();
+        gecxSend(intent);
+      }, 600);
+    } else if (!sessionStarted) {
+      setSessionStarted(true);
+      showTyping();
+      initGecx();
+    }
+    setTimeout(() => inputRef.current?.focus(), 300);
+  }, [isOpen]); // eslint-disable-line
+
+  /* ── Tile selected ── */
+  const handleTileSelect = useCallback((action, comboId) => {
+    // Remove the combo card
+    setMessages((prev) => prev.filter((m) => m.id !== comboId));
+    addUser(action.content || action.utterance);
+    showTyping();
+    gecxSend(action.utterance || action.content);
+  }, [addUser, showTyping]);
+
+  /* ── Send typed message ── */
+  const sendMessage = useCallback(() => {
+    const text = inputVal.trim();
+    if (!text) return;
+    setInputVal('');
+    addUser(text);
+    showTyping();
+    gecxSend(text);
+  }, [inputVal, addUser, showTyping]);
+
+  /* ── Reset conversation ── */
+  const handleReset = useCallback(() => {
+    setMessages([]);
+    setCarousel(null);
+    setSessionStarted(false);
+    setInputVal('');
+    resetGecx();
+    // Show typing after short delay to let session reset propagate
+    setTimeout(() => showTyping(), 600);
+    onReset?.();
+  }, [showTyping, onReset]);
+
+  /* ── Voice input ── */
+  const toggleVoice = useCallback(() => {
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      alert('Voice input not supported in this browser.');
+      return;
+    }
+    if (voiceActive) {
+      recognitionRef.current?.stop();
+      setVoiceActive(false);
+      return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = new SR();
+    rec.lang = 'en-CA';
+    rec.interimResults = false;
+    rec.onresult = (e) => {
+      setInputVal(e.results[0][0].transcript);
+      setTimeout(sendMessage, 100);
+    };
+    rec.onend = () => setVoiceActive(false);
+    rec.start();
+    recognitionRef.current = rec;
+    setVoiceActive(true);
+  }, [voiceActive, sendMessage]);
+
+  /* ── File upload ── */
+  const handleFileUpload = useCallback((e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    addUser(`📎 ${file.name}`);
+    showTyping();
+    gecxSend(`I am uploading a file: ${file.name}`);
+    e.target.value = '';
+  }, [addUser, showTyping]);
+
+  /* ── Carousel CTA ── */
+  const handleCarouselCta = useCallback((ctaValue) => {
+    setCarousel(null);
+    showTyping();
+    gecxSend(ctaValue);
+  }, [showTyping]);
+
+  return (
+    <>
+      {/* Hidden GECX widget */}
+      <div style={{ position: 'fixed', bottom: 0, right: 0, visibility: 'hidden', height: 0, width: 0 }}>
+        <chat-messenger
+          id="gecx-messenger"
+          url-allowlist="*"
+          language-code="en"
+          max-query-length="-1"
+          style={{ visibility: 'hidden', height: 0, width: 0, display: 'block', position: 'fixed', bottom: 0, right: 0 }}
+        >
+          <chat-messenger-container chat-title="ACN Bank AI">
+            <chat-reset-session-button slot="titlebar-actions" title-text="New conversation" />
+          </chat-messenger-container>
+        </chat-messenger>
+      </div>
+
+      {/* Chat window */}
+      <div className={`acn-chat-window${isOpen ? '' : ' closed'}`}>
+
+        {/* Header */}
+        <div className="acn-chat-header">
+          <div className="acn-chat-avatar">A</div>
+          <div style={{ flex: 1 }}>
+            <div className="acn-chat-title">ACN Bank AI</div>
+            <div className="acn-chat-status">
+              <div className="acn-chat-status-dot" />
+              Online &middot; Responding now
+            </div>
+          </div>
+          <div className="acn-chat-header-btns">
+            <button className="acn-icon-btn" onClick={handleReset} title="New conversation">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="1 4 1 10 7 10"/>
+                <path d="M3.51 15a9 9 0 1 0 .49-4.95"/>
+              </svg>
+            </button>
+            <button className="acn-icon-btn" onClick={onClose} style={{ fontSize: 20 }}>&#x2715;</button>
+          </div>
+        </div>
+
+        {/* Messages */}
+        <div className="acn-messages" ref={msgsRef}>
+          {messages.map((msg) => {
+            if (msg.type === 'bot') {
+              return <div key={msg.id} className="acn-bot-bubble">{msg.text}</div>;
+            }
+            if (msg.type === 'user') {
+              return <div key={msg.id} className="acn-user-bubble">{msg.text}</div>;
+            }
+            if (msg.type === 'typing') {
+              return (
+                <div key={msg.id} className="acn-typing">
+                  <span /><span /><span />
+                </div>
+              );
+            }
+            if (msg.type === 'combo') {
+              return (
+                <ComboCard
+                  key={msg.id}
+                  heading={msg.heading}
+                  actions={msg.actions}
+                  onSelect={(action) => handleTileSelect(action, msg.id)}
+                />
+              );
+            }
+            return null;
+          })}
+        </div>
+
+        {/* Input bar */}
+        <div className="acn-input-bar">
+          <button
+            className="acn-input-icon-btn"
+            title="Attach file"
+            onClick={() => document.getElementById('acn-file-input').click()}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+            </svg>
+          </button>
+          <input id="acn-file-input" type="file" style={{ display: 'none' }} onChange={handleFileUpload} />
+
+          <input
+            ref={inputRef}
+            className="acn-input"
+            type="text"
+            placeholder="Ask something..."
+            autoComplete="off"
+            value={inputVal}
+            onChange={(e) => setInputVal(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+          />
+
+          <button
+            className={`acn-input-icon-btn${voiceActive ? ' active' : ''}`}
+            title="Voice input"
+            onClick={toggleVoice}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </button>
+
+          <button className="acn-send-btn" onClick={sendMessage}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Carousel */}
+      {carousel && (
+        <Carousel
+          data={carousel}
+          onCta={handleCarouselCta}
+          onClose={() => setCarousel(null)}
+        />
+      )}
+    </>
+  );
+}
