@@ -79,8 +79,10 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   const addBot = useCallback((text) => {
     const clean = stripMarkdown(text);
     if (!clean) return;
-    // Write to ref synchronously — visible to showCombo even before React commits state
-    pendingHeadingRef.current = clean;
+    // Write to ref synchronously — only if null (first text in turn wins as heading)
+    // Prevents later addBot calls (e.g. tagline) from overwriting the card heading
+    if (!pendingHeadingRef.current) pendingHeadingRef.current = clean;
+    console.log('[ACN] addBot:', clean.slice(0,50), '| pendingHeading:', pendingHeadingRef.current?.slice(0,40));
     setMessages((prev) => [...prev, { type: 'bot', text: clean, id: uid() }]);
   }, []);
 
@@ -137,7 +139,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   /* ── Extract Say: lines ── */
   const extractSayLines = useCallback((text) => {
     const lines = [];
-    const re = /Say:\s*["'](.*?)["'](?=\s*(?:Say:|tool_code:|$))/gs;
+    const re = /Say:\s*["`'](.*?)["`'](?=\s*(?:Say:|tool_code:|$))/gs;
     let m;
     while ((m = re.exec(text)) !== null) lines.push(m[1].trim());
     return lines;
@@ -153,6 +155,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     // Read ref synchronously NOW before any async setState
     const pending = pendingHeadingRef.current;
     pendingHeadingRef.current = null; // consume
+    console.log('[ACN] showCombo — pending:', pending?.slice(0,40), '| summary:', summary?.slice(0,40));
 
     setMessages((prev) => {
       if (forcedHeading) {
@@ -204,6 +207,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
 
     if (!hasVisible) return; // intermediate tool call — keep typing indicator alive
 
+    console.log('[ACN] processOutputs — visible outputs:', outputs.length, outputs.map(o => o.text ? 'text:'+o.text.slice(0,40) : o.payload ? 'payload:'+o.payload.type : 'other'));
     removeTyping();
 
     // Pass 1: text — sets pendingHeadingRef so showCombo in Pass 2 can use it
