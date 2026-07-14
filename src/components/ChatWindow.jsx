@@ -29,10 +29,13 @@ function BotText({ text }) {
 let _idCounter = 0;
 const uid = () => ++_idCounter;
 
+// Strip leading emoji + whitespace before checking heading type
+const stripEmoji = (h) => h ? h.replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27FF}\u{FE00}-\u{FE0F}\s]+/gu, '') : '';
+
 // True when heading means "user must type — show fallback tiles compact"
 const isFH = (h) => {
   if (!h) return false;
-  const l = h.toLowerCase();
+  const l = stripEmoji(h).toLowerCase();
   return l.startsWith('please type')       || l.startsWith('please enter') ||
          l.startsWith('type your')         || l.startsWith('enter your')   ||
          l.startsWith('or identify')       || l.startsWith('or choose')    ||
@@ -51,9 +54,11 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   const inputRef = useRef(null);
   const recognitionRef = useRef(null);
   const respondingTimerRef = useRef(null);
-  // Synchronous bridge: addBot writes here, showCombo reads it as heading
-  // Bypasses React batching — ref updates are always visible across event callbacks
+  // pendingHeadingRef: addBot sets this synchronously so showCombo can read it
+  // even before React commits the setState. Only first addBot per turn wins.
   const pendingHeadingRef = useRef(null);
+  // comboCreatedThisTurn: true once a combo is shown — prevents duplicate from payload
+  const comboCreatedRef = useRef(false);
 
   /* ── Scroll ── */
   const scrollToBottom = useCallback(() => {
@@ -79,10 +84,9 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   const addBot = useCallback((text) => {
     const clean = stripMarkdown(text);
     if (!clean) return;
-    // Write to ref synchronously — only if null (first text in turn wins as heading)
-    // Prevents later addBot calls (e.g. tagline) from overwriting the card heading
+    // First addBot per turn sets the pending heading — later ones don't overwrite
     if (!pendingHeadingRef.current) pendingHeadingRef.current = clean;
-    console.log('[ACN] addBot:', clean.slice(0,50), '| pendingHeading:', pendingHeadingRef.current?.slice(0,40));
+    console.log('[ACN] addBot:', clean.slice(0, 50), '| pending:', pendingHeadingRef.current.slice(0, 40));
     setMessages((prev) => [...prev, { type: 'bot', text: clean, id: uid() }]);
   }, []);
 
@@ -91,7 +95,8 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   }, []);
 
   const showTyping = useCallback(() => {
-    pendingHeadingRef.current = null; // new user turn — reset pending heading
+    pendingHeadingRef.current = null;  // new user turn
+    comboCreatedRef.current = false;   // new user turn
     setIsResponding(true);
     setMessages((prev) => {
       const f = prev.filter((m) => m.type !== 'typing');
@@ -136,7 +141,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     } catch (e) { return null; }
   }, []);
 
-  /* ── Extract Say: lines ── */
+  /* ── Extract Say: lines (supports ' " ` quotes) ── */
   const extractSayLines = useCallback((text) => {
     const lines = [];
     const re = /Say:\s*["`'](.*?)["`'](?=\s*(?:Say:|tool_code:|$))/gs;
@@ -147,33 +152,43 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
 
   /* ── Show combo card ──
      Heading priority:
-     1. forcedHeading (from tool_code Say: line)
-     2. pendingHeadingRef — text from addBot in same or previous event (bypasses React batching)
+     1. forcedHeading (explicit, e.g. from Say: line)
+     2. pendingHeadingRef (set by addBot — bypasses React batching)
      3. last bot bubble in committed state
-     4. summary fallback ── */
+     4. summary string
+     Deduplication: comboCreatedRef prevents duplicate combo from payload
+     when tool_code text already created one ── */
   const showCombo = useCallback((actions, summary, forcedHeading, forcedSubtitle) => {
-    // Read ref synchronously NOW before any async setState
     const pending = pendingHeadingRef.current;
-    pendingHeadingRef.current = null; // consume
-    console.log('[ACN] showCombo — pending:', pending?.slice(0,40), '| summary:', summary?.slice(0,40));
+    pendingHeadingRef.current = null;
+
+    console.log('[ACN] showCombo — pending:', pending?.slice(0, 40), '| summary:', summary?.slice(0, 40), '| comboCreated:', comboCreatedRef.current);
+
+    // If a combo was already created this turn (by tool_code text path),
+    // the payload arriving after would create a duplicate — skip it
+    if (comboCreatedRef.current && !forcedHeading) {
+      console.log('[ACN] showCombo — skipped (duplicate prevention)');
+      return;
+    }
+
+    comboCreatedRef.current = true;
 
     setMessages((prev) => {
       if (forcedHeading) {
         return [...prev, { type: 'combo', heading: forcedHeading, subtitle: forcedSubtitle, actions, id: uid(), compact: isFH(forcedHeading) }];
       }
-      // Use pending ref heading (set by addBot — bypasses React batching)
+      // Use pending ref (bypasses React batching — always fresh)
       if (pending) {
-        // Remove the matching bot bubble from state if it's there (avoid duplicate)
+        // Remove matching bot bubble from state if it committed already (avoid duplicate text)
         const li = [...prev].reverse().findIndex((m) => m.type === 'bot' && m.text === pending);
         if (li !== -1) {
           const ri = prev.length - 1 - li;
           const without = prev.filter((_, i) => i !== ri);
           return [...without, { type: 'combo', heading: pending, actions, id: uid(), compact: isFH(pending) }];
         }
-        // Bot bubble not in state yet (React batching) — just use pending as heading
         return [...prev, { type: 'combo', heading: pending, actions, id: uid(), compact: isFH(pending) }];
       }
-      // Last resort: absorb last bot bubble from state
+      // Absorb last bot bubble from committed state
       const li = [...prev].reverse().findIndex((m) => m.type === 'bot');
       if (li !== -1) {
         const ri = prev.length - 1 - li;
@@ -181,15 +196,16 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
         const without = prev.filter((_, i) => i !== ri);
         return [...without, { type: 'combo', heading: h, actions, id: uid(), compact: isFH(h) }];
       }
-      // Final fallback — use summary
-      const h = summary || 'How can I help?';
+      // Final fallback
+      const h = summary || 'What can I help you with?';
       return [...prev, { type: 'combo', heading: h, subtitle: forcedSubtitle, actions, id: uid(), compact: isFH(h) }];
     });
   }, []);
 
   /* ── Process GECX outputs ──
-     1. Skip if no visible content (intermediate tool responses — keep typing)
-     2. Text pass first — sets pendingHeadingRef and bot bubbles
+     Rules:
+     1. Skip if no visible content (intermediate tool calls)
+     2. Text pass first — sets pendingHeadingRef and renders bot bubbles
      3. Payload pass second — showCombo reads pendingHeadingRef ── */
   const processOutputs = useCallback((outputs) => {
     const hasVisible = outputs.some((o) => {
@@ -205,12 +221,17 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
       return stripMarkdown(t).length > 0;
     });
 
-    if (!hasVisible) return; // intermediate tool call — keep typing indicator alive
+    if (!hasVisible) return;
 
-    console.log('[ACN] processOutputs — visible outputs:', outputs.length, outputs.map(o => o.text ? 'text:'+o.text.slice(0,40) : o.payload ? 'payload:'+o.payload.type : 'other'));
+    console.log('[ACN] processOutputs:', outputs.map(o =>
+      o.text ? 'text:' + o.text.slice(0, 50).replace(/\n/g, '\\n')
+      : o.payload ? 'payload:' + (o.payload.type || o.payload.name)
+      : 'other'
+    ));
+
     removeTyping();
 
-    // Pass 1: text — sets pendingHeadingRef so showCombo in Pass 2 can use it
+    // Pass 1: text outputs
     outputs.forEach((output) => {
       if (!output.text) return;
       const text = output.text;
@@ -219,12 +240,14 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
       if (tc) {
         const sl = extractSayLines(text);
         if (sl.length >= 2) {
-          // Welcome: first Say = heading, second Say = subtitle inside card
+          // Welcome: sl[0] = heading, sl[1] = subtitle inside card
+          comboCreatedRef.current = true;
           setMessages((prev) => [...prev, {
             type: 'combo', heading: sl[0], subtitle: sl[1],
             actions: tc.actions, id: uid(), compact: isFH(sl[0])
           }]);
         } else if (sl.length === 1) {
+          comboCreatedRef.current = true;
           setMessages((prev) => [...prev, {
             type: 'combo', heading: sl[0],
             actions: tc.actions, id: uid(), compact: isFH(sl[0])
@@ -235,7 +258,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
         return;
       }
 
-      // Narrated quick_actions text fallback
+      // Narrated quick_actions text fallback (older format)
       if (text.includes('quick_actions') && text.includes('content:') && text.includes('utterance:')) {
         const acts = [];
         const re = /content:\s*["']?([^,}"'\n]+?)["']?\s*,\s*description:\s*["']?([^,}"'\n]+?)["']?\s*,\s*utterance:\s*["']?([^}"'\n\]]+?)["']?\s*\}/g;
@@ -247,16 +270,17 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
 
       if (text.includes('narration_checkpoint') || text.includes('tool_code:')) return;
 
-      addBot(text); // also sets pendingHeadingRef
+      addBot(text);
     });
 
-    // Pass 2: payload — pendingHeadingRef now has the correct heading text
+    // Pass 2: payload outputs — pendingHeadingRef set by Pass 1
     outputs.forEach((output) => {
       if (!output.payload) return;
       const p = output.payload;
       if (p.type === 'quick_actions' && p.actions) showCombo(p.actions, p.summary);
       if (p.name === 'acn-form-input' && p.fields) {
         setActiveForm({ payload: p, id: uid() });
+        // Mark all existing combo cards as compact — they're now fallback options
         setMessages((prev) => prev.map((m) => m.type === 'combo' ? { ...m, compact: true } : m));
       }
       if (p.name === 'acn-payment-carousel') setCarousel(p);
@@ -312,6 +336,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     setInputVal('');
     setIsResponding(false);
     pendingHeadingRef.current = null;
+    comboCreatedRef.current = false;
     if (respondingTimerRef.current) clearTimeout(respondingTimerRef.current);
     resetGecx();
     setTimeout(() => showTyping(), 600);
