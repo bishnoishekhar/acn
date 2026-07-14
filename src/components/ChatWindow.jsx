@@ -92,42 +92,36 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   }, []);
 
   /* ── Parse Gemini 2.5 tool_code format ── */
-  /* Handles dict style: 'content': 'val' AND kwargs style: content='val' */
+  /* Handles QuickActionsPayloadActions(content='...') and dict {'content': '...'} */
   const parseToolCode = useCallback((text) => {
     if (!text.includes('tool_code') && !text.includes('default_api.quick_actions')) return null;
     try {
       const actions = [];
+      // Find all content= or 'content': occurrences and their values
+      // Using simple string splitting approach to avoid backreference issues
+      const findVal = (str, key) => {
+        const re = new RegExp(key + "\\s*[=:]\\s*(['\"])");
+        const m = str.match(re);
+        if (!m) return null;
+        const quote = m[1];
+        const after = str.slice(str.indexOf(m[0]) + m[0].length);
+        const end = after.indexOf(quote);
+        return end === -1 ? null : after.slice(0, end);
+      };
 
-      // Split on action object boundaries — each action starts with content=
-      // Works for both: content='...' and 'content': '...'
-      // Use a greedy approach: find all content= occurrences then grab text until next one
-      const contentPattern = /content\s*[=:]\s*(['"])((?:(?!).)*)/g;
-      const allMatches = [];
-      let m;
-      while ((m = contentPattern.exec(text)) !== null) {
-        allMatches.push({ index: m.index, content: m[2] });
-      }
-
-      allMatches.forEach((match, i) => {
-        const content = match.content.trim();
-        const nextIdx = allMatches[i + 1] ? allMatches[i + 1].index : Math.min(match.index + 900, text.length);
-        const snippet = text.slice(match.index, nextIdx);
-
-        // utterance and description — handle both formats, allow apostrophes
-        const uttM = snippet.match(/utterance\s*[=:]\s*(['"])((?:(?!).)*)/);
-        const descM = snippet.match(/description\s*[=:]\s*(['"])((?:(?!).)*)/);
-
-        if (content && uttM) {
-          actions.push({
-            content,
-            description: descM ? descM[2].trim() : '',
-            utterance: uttM[2].trim()
-          });
+      // Split by QuickActionsPayloadActions( or by action object {
+      const parts = text.split(/QuickActionsPayloadActions\s*\(|(?<=\{)(?=\s*['"]?content['"]?\s*[=:])/);
+      parts.forEach((part) => {
+        const c = findVal(part, 'content');
+        const u = findVal(part, 'utterance');
+        const d = findVal(part, 'description');
+        if (c && u) {
+          actions.push({ content: c.trim(), description: d ? d.trim() : '', utterance: u.trim() });
         }
       });
 
-      const sumM = text.match(/summary\s*[=:]\s*(['"])((?:(?!).)*)/);
-      const summary = sumM ? sumM[2].trim() : 'What can I help you with?';
+      const sum = findVal(text, 'summary');
+      const summary = sum ? sum.trim() : 'What can I help you with?';
       return actions.length > 0 ? { actions, summary } : null;
     } catch (e) { return null; }
   }, []);
