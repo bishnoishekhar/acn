@@ -41,17 +41,14 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   const recognitionRef = useRef(null);
 
   /* ── Scroll to bottom ── */
-  const scrollToBottom = useCallback((behavior = 'smooth') => {
-    requestAnimationFrame(() => {
-      if (msgsRef.current) {
-        msgsRef.current.scrollTo({ top: msgsRef.current.scrollHeight, behavior });
-      }
-    });
-    setTimeout(() => {
-      if (msgsRef.current) {
-        msgsRef.current.scrollTo({ top: msgsRef.current.scrollHeight, behavior: 'smooth' });
-      }
-    }, 150);
+  const scrollToBottom = useCallback(() => {
+    // Instant scroll — no smooth, fires multiple times to catch late renders
+    const el = msgsRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => { if (msgsRef.current) msgsRef.current.scrollTop = msgsRef.current.scrollHeight; });
+    setTimeout(() => { if (msgsRef.current) msgsRef.current.scrollTop = msgsRef.current.scrollHeight; }, 50);
+    setTimeout(() => { if (msgsRef.current) msgsRef.current.scrollTop = msgsRef.current.scrollHeight; }, 200);
   }, []);
 
   /* ── Add messages ── */
@@ -217,6 +214,8 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     addUser(action.content || action.utterance);
     showTyping();
     gecxSend(action.utterance || action.content);
+    // Force scroll after tile selection — combo removal can shift layout
+    setTimeout(() => { if (msgsRef.current) msgsRef.current.scrollTop = msgsRef.current.scrollHeight; }, 50);
   }, [addUser, showTyping]);
 
   /* ── Send message ── */
