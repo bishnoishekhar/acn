@@ -79,7 +79,9 @@ footer span{font-size:11px;color:#B0A0C8;}
 .acn-chat-avatar{width:36px;height:36px;border-radius:50%;background:#A100FF;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;}
 .acn-chat-title{font-size:15px;font-weight:800;color:#140025;letter-spacing:-.3px;}
 .acn-chat-status{font-size:11px;color:#1A6E3C;display:flex;align-items:center;gap:4px;margin-top:2px;}
-.acn-chat-status-dot{width:6px;height:6px;border-radius:50%;background:#1A6E3C;}
+.acn-chat-status-dot{width:6px;height:6px;border-radius:50%;background:#1A6E3C;transition:background .3s;}
+.acn-chat-status-dot.responding{background:#A100FF;animation:acnPulse 1s infinite;}
+@keyframes acnPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
 .acn-chat-header-btns{display:flex;gap:4px;margin-left:auto;}
 .acn-icon-btn{width:30px;height:30px;border-radius:50%;background:transparent;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s;color:#6B5B8A;font-size:18px;line-height:1;}
 .acn-icon-btn:hover{background:#F5EEFF;color:#A100FF;}
@@ -89,8 +91,13 @@ footer span{font-size:11px;color:#B0A0C8;}
 .acn-messages::-webkit-scrollbar{width:4px;}
 .acn-messages::-webkit-scrollbar-thumb{background:#D0B8F0;border-radius:4px;}
 
+/* ── Message enter animation ── */
+@keyframes acnMsgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.acn-msg-enter{animation:acnMsgIn .22s ease forwards;}
+
 /* ── Bubbles ── */
 .acn-bot-bubble{background:#fff;border:1px solid #EBEBEB;border-top:3px solid #A100FF;border-radius:4px 18px 18px 18px;padding:15px 17px;font-size:14px;font-weight:500;color:#140025;line-height:1.65;max-width:94%;align-self:flex-start;}
+.acn-bot-consecutive{border-top:1px solid #EBEBEB;border-radius:18px;margin-top:-4px;}
 .acn-user-bubble{background:#A100FF;color:#fff;border-radius:18px 4px 18px 18px;padding:11px 16px;font-size:14px;font-weight:500;line-height:1.5;max-width:80%;align-self:flex-end;box-shadow:0 2px 12px rgba(161,0,255,.3);}
 
 /* ── Typing ── */
@@ -118,6 +125,8 @@ footer span{font-size:11px;color:#B0A0C8;}
 .acn-send-btn{width:36px;height:36px;border-radius:50%;background:#A100FF;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;box-shadow:0 2px 8px rgba(161,0,255,.3);transition:background .15s,transform .1s;}
 .acn-send-btn:hover{background:#8800DD;transform:scale(1.05);}
 .acn-send-btn:active{transform:scale(0.96);}
+.acn-send-btn.disabled{opacity:.5;cursor:not-allowed;transform:none;}
+.acn-input:disabled{opacity:.7;cursor:not-allowed;}
 .acn-input-icon-btn{width:34px;height:34px;border-radius:50%;background:transparent;border:none;color:#A090C0;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .15s;}
 .acn-input-icon-btn:hover{background:#F5EEFF;color:#A100FF;}
 .acn-input-icon-btn.active{color:#A100FF;}
@@ -161,3 +170,52 @@ footer span{font-size:11px;color:#B0A0C8;}
 .acn-carousel-footer{padding:8px 14px;border-top:1px solid #EDE5F8;background:#FDFAFF;display:flex;justify-content:center;align-items:center;gap:5px;}
 .acn-powered-dot{width:5px;height:5px;border-radius:50%;background:#A100FF;}
 .acn-powered-text{font-size:9px;color:#A090C0;}
+
+/* ── AcnFormInput widget ── */
+.acn-form-widget{background:#fff;border:1px solid #EBEBEB;border-top:3px solid #A100FF;border-radius:4px 18px 18px 18px;padding:16px 18px 14px;max-width:98%;align-self:flex-start;}
+.acn-form-title{font-size:14px;font-weight:700;color:#140025;margin-bottom:4px;}
+.acn-form-subtitle{font-size:12.5px;color:#6B5B8A;margin-bottom:14px;line-height:1.45;}
+.acn-form-fields{display:flex;flex-direction:column;gap:12px;margin-bottom:14px;}
+.acn-form-field{display:flex;flex-direction:column;gap:4px;}
+.acn-form-label{font-size:12px;font-weight:600;color:#140025;}
+.acn-form-req{color:#A100FF;}
+.acn-form-input-el{background:#F4F1F9;border:1px solid #E8E3F0;border-radius:10px;padding:9px 13px;font-size:13.5px;font-family:'DM Sans',-apple-system,sans-serif;color:#140025;outline:none;transition:border-color .15s,background .15s;width:100%;}
+.acn-form-input-el:focus{border-color:#A100FF;background:#fff;}
+.acn-form-input-el.error{border-color:#CC2828;background:#FFF5F5;}
+.acn-form-input-el:disabled{opacity:.6;cursor:not-allowed;}
+.acn-form-hint{font-size:11px;color:#A090C0;line-height:1.4;}
+.acn-form-error{font-size:11px;color:#CC2828;font-weight:500;}
+.acn-form-cta{width:100%;padding:10px;border-radius:10px;background:#A100FF;color:#fff;font-size:13px;font-weight:700;font-family:'DM Sans',-apple-system,sans-serif;cursor:pointer;border:none;transition:background .15s,opacity .15s;box-shadow:0 2px 10px rgba(161,0,255,.3);}
+.acn-form-cta:hover:not(:disabled){background:#8800DD;}
+.acn-form-cta.submitted,.acn-form-cta:disabled{opacity:.6;cursor:not-allowed;}
+
+/* ── AcnPaymentReceipt ── */
+.acn-receipt{background:#fff;border:1px solid #EBEBEB;border-top:3px solid #1E9E50;border-radius:4px 18px 18px 18px;padding:14px 16px;max-width:98%;align-self:flex-start;}
+.acn-receipt-header{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+.acn-receipt-icon{font-size:16px;}
+.acn-receipt-title{font-size:14px;font-weight:700;color:#140025;}
+.acn-receipt-body{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;}
+.acn-receipt-row{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+.acn-receipt-label{font-size:12px;color:#6B5B8A;flex-shrink:0;}
+.acn-receipt-value{font-size:13px;font-weight:500;color:#140025;text-align:right;}
+.acn-receipt-amount{font-size:15px;font-weight:800;color:#140025;}
+.acn-receipt-ref{font-family:monospace;font-size:11px;color:#6B5B8A;}
+.acn-receipt-status{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:5px 12px;border-radius:20px;}
+.receipt-status-success{background:#EAFBF0;color:#1A6E3C;}
+.receipt-status-blocked{background:#F5EEFF;color:#7000BB;}
+.receipt-status-cancelled{background:#FFF1F1;color:#8A1C1C;}
+.receipt-status-pending{background:#FFF8E8;color:#7A5A00;}
+.receipt-status-info{background:#E5F6FA;color:#0E6070;}
+
+/* ── AcnPayeeSelector ── */
+.acn-payee-selector{background:#fff;border:1px solid #EBEBEB;border-top:3px solid #A100FF;border-radius:4px 18px 18px 18px;padding:14px 16px;max-width:98%;align-self:flex-start;}
+.acn-payee-title{font-size:14px;font-weight:700;color:#140025;margin-bottom:4px;}
+.acn-payee-subtitle{font-size:12px;color:#6B5B8A;margin-bottom:12px;}
+.acn-payee-list{display:flex;flex-direction:column;gap:6px;}
+.acn-payee-item{background:#fff;border:1px solid #EBEBEB;border-radius:10px;padding:11px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:border-color .15s,background .15s;text-align:left;}
+.acn-payee-item:hover{border-color:#C070FF;background:#FDFAFF;}
+.acn-payee-item-left{display:flex;align-items:center;gap:10px;}
+.acn-payee-avatar{width:32px;height:32px;border-radius:50%;background:#F5EEFF;color:#A100FF;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;}
+.acn-payee-name{font-size:13px;font-weight:600;color:#140025;}
+.acn-payee-acct{font-size:11px;color:#6B5B8A;margin-top:2px;}
+.acn-payee-arrow{font-size:20px;color:#D0B0F0;}
