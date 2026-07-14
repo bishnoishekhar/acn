@@ -6,9 +6,9 @@ import Carousel from './Carousel';
 
 function stripMarkdown(text) {
   return text
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/^#{1,3}\s+/gm, '')
+    .replace(/**([^*]+)**/g, '$1')
+    .replace(/*([^*]+)*/g, '$1')
+    .replace(/^#{1,3}s+/gm, '')
     .trim();
 }
 
@@ -40,30 +40,24 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   const msgsRef = useRef(null);
   const inputRef = useRef(null);
   const recognitionRef = useRef(null);
+  const respondingTimerRef = useRef(null);
 
-  /* ── Scroll to bottom ── */
   const scrollToBottom = useCallback(() => {
     const snap = () => {
       if (!msgsRef.current) return;
       const combo = msgsRef.current.querySelector('[data-combo="true"]:last-child');
       if (combo) {
-        const comboBottom = combo.offsetTop + combo.offsetHeight;
-        const viewBottom = msgsRef.current.scrollTop + msgsRef.current.clientHeight;
-        if (comboBottom > viewBottom) {
-          msgsRef.current.scrollTop = comboBottom - msgsRef.current.clientHeight + 16;
-        }
+        const cb = combo.offsetTop + combo.offsetHeight;
+        const vb = msgsRef.current.scrollTop + msgsRef.current.clientHeight;
+        if (cb > vb) msgsRef.current.scrollTop = cb - msgsRef.current.clientHeight + 16;
       } else {
         msgsRef.current.scrollTop = msgsRef.current.scrollHeight;
       }
     };
-    snap();
-    requestAnimationFrame(snap);
-    setTimeout(snap, 50);
-    setTimeout(snap, 200);
-    setTimeout(snap, 400);
+    snap(); requestAnimationFrame(snap);
+    setTimeout(snap, 50); setTimeout(snap, 200); setTimeout(snap, 400);
   }, []);
 
-  /* ── Add messages ── */
   const addBot = useCallback((text) => {
     const clean = stripMarkdown(text);
     if (!clean) return;
@@ -74,15 +68,9 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     setMessages((prev) => [...prev, { type: 'user', text, id: uid() }]);
   }, []);
 
-  const respondingTimerRef = useRef(null);
-
   const showTyping = useCallback(() => {
     setIsResponding(true);
-    setMessages((prev) => {
-      const filtered = prev.filter((m) => m.type !== 'typing');
-      return [...filtered, { type: 'typing', id: uid() }];
-    });
-    // Safety: clear responding state after 12s if no response received
+    setMessages((prev) => { const f = prev.filter((m) => m.type !== 'typing'); return [...f, { type: 'typing', id: uid() }]; });
     if (respondingTimerRef.current) clearTimeout(respondingTimerRef.current);
     respondingTimerRef.current = setTimeout(() => {
       setIsResponding(false);
@@ -96,396 +84,139 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     setMessages((prev) => prev.filter((m) => m.type !== 'typing'));
   }, []);
 
-  /* ── Parse tool_code quick_actions ──
-     Handles dict style, kwargs style, apostrophes, escaped quotes ── */
+  /* parseToolCode — handles dict 'key':'val', kwargs key='val',
+     apostrophes "I'm" via double-quote fallback, Safari-safe */
   const parseToolCode = useCallback((text) => {
     if (!text.includes('tool_code') && !text.includes('default_api.quick_actions')) return null;
     try {
       const actions = [];
-
-      // findVal: extract value for a key, handles both quote styles and escaped apostrophes
-      const findVal = (str, key) => {
-        // Double-quoted value: 'key': "value"
-        var dqRe = new RegExp("['\"]" + key + "['\"]\\s*[=:]\\s*\"([^\"]*)\"");
-        var dqM = str.match(dqRe);
-        if (dqM) return dqM[1];
-        // Single-quoted value: scan manually to handle apostrophes e.g. I\'m
-        var sqRe = new RegExp("['\"]" + key + "['\"]\\s*[=:]\\s*'");
-        var sqM = str.match(sqRe);
-        if (sqM) {
-          var si = str.indexOf(sqM[0]) + sqM[0].length;
-          var sr = ""; var ii = si;
-          while (ii < str.length) {
-            if (str[ii] === "\\" && str[ii+1] === "'") { sr += "'"; ii += 2; }
-            else if (str[ii] === "'") break;
-            else { sr += str[ii]; ii++; }
-          }
-          if (sr) return sr;
-        }
-        // kwargs: key='value'
-        var kwRe = new RegExp("\\b" + key + "\\s*=\\s*'");
-        var kwM = str.match(kwRe);
-        if (kwM) {
-          var ki = str.indexOf(kwM[0]) + kwM[0].length;
-          var kr = ""; var jj = ki;
-          while (jj < str.length) {
-            if (str[jj] === "\\" && str[jj+1] === "'") { kr += "'"; jj += 2; }
-            else if (str[jj] === "'") break;
-            else { kr += str[jj]; jj++; }
-          }
-          if (kr) return kr;
-        }
-        // kwargs: key="value"
-        var kdRe = new RegExp("\\b" + key + "\\s*=\\s*\"([^\"]*)\"");
-        var kdM = str.match(kdRe);
-        if (kdM) return kdM[1];
+      const fv = (str, key) => {
+        const QK = "['\"]" + key + "['\"]";
+        let m;
+        m = str.match(new RegExp(QK + '\\s*[=:]\\s*"([^"]*)"'));  if (m) return m[1];
+        m = str.match(new RegExp(QK + "\\s*[=:]\\s*'([^']*)'")); if (m) return m[1];
+        m = str.match(new RegExp('\\b' + key + "\\s*=\\s*'([^']*)'"));  if (m) return m[1];
+        m = str.match(new RegExp('\\b' + key + '\\s*=\\s*"([^"]*)"')); if (m) return m[1];
         return null;
-      }; { useState, useEffect, useRef, useCallback } from 'react';
-import { initGecx, resetGecx, gecxSend, setResponseHandler } from './gecx';
-import ComboCard from './ComboCard';
-import AcnFormWidget from './AcnFormWidget';
-import Carousel from './Carousel';
-
-function stripMarkdown(text) {
-  return text
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/^#{1,3}\s+/gm, '')
-    .trim();
-}
-
-function BotText({ text }) {
-  const lines = text.split('\n').filter(Boolean);
-  if (lines.length <= 1) return <>{text}</>;
-  return (
-    <>
-      {lines.map((line, i) => (
-        <span key={i} style={{ display: 'block', marginBottom: i < lines.length - 1 ? '6px' : 0 }}>
-          {line}
-        </span>
-      ))}
-    </>
-  );
-}
-
-let _idCounter = 0;
-const uid = () => ++_idCounter;
-
-export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
-  const [messages, setMessages] = useState([]);
-  const [inputVal, setInputVal] = useState('');
-  const [carousel, setCarousel] = useState(null);
-  const [activeForm, setActiveForm] = useState(null);
-  const [voiceActive, setVoiceActive] = useState(false);
-  const [sessionStarted, setSessionStarted] = useState(false);
-  const [isResponding, setIsResponding] = useState(false);
-  const msgsRef = useRef(null);
-  const inputRef = useRef(null);
-  const recognitionRef = useRef(null);
-
-  /* ── Scroll to bottom ── */
-  const scrollToBottom = useCallback(() => {
-    const snap = () => {
-      if (!msgsRef.current) return;
-      const combo = msgsRef.current.querySelector('[data-combo="true"]:last-child');
-      if (combo) {
-        const comboBottom = combo.offsetTop + combo.offsetHeight;
-        const viewBottom = msgsRef.current.scrollTop + msgsRef.current.clientHeight;
-        if (comboBottom > viewBottom) {
-          msgsRef.current.scrollTop = comboBottom - msgsRef.current.clientHeight + 16;
-        }
-      } else {
-        msgsRef.current.scrollTop = msgsRef.current.scrollHeight;
-      }
-    };
-    snap();
-    requestAnimationFrame(snap);
-    setTimeout(snap, 50);
-    setTimeout(snap, 200);
-    setTimeout(snap, 400);
-  }, []);
-
-  /* ── Add messages ── */
-  const addBot = useCallback((text) => {
-    const clean = stripMarkdown(text);
-    if (!clean) return;
-    setMessages((prev) => [...prev, { type: 'bot', text: clean, id: uid() }]);
-  }, []);
-
-  const addUser = useCallback((text) => {
-    setMessages((prev) => [...prev, { type: 'user', text, id: uid() }]);
-  }, []);
-
-  const respondingTimerRef = useRef(null);
-
-  const showTyping = useCallback(() => {
-    setIsResponding(true);
-    setMessages((prev) => {
-      const filtered = prev.filter((m) => m.type !== 'typing');
-      return [...filtered, { type: 'typing', id: uid() }];
-    });
-    // Safety: clear responding state after 12s if no response received
-    if (respondingTimerRef.current) clearTimeout(respondingTimerRef.current);
-    respondingTimerRef.current = setTimeout(() => {
-      setIsResponding(false);
-      setMessages((prev) => prev.filter((m) => m.type !== 'typing'));
-    }, 12000);
-  }, []);
-
-  const removeTyping = useCallback(() => {
-    if (respondingTimerRef.current) clearTimeout(respondingTimerRef.current);
-    setIsResponding(false);
-    setMessages((prev) => prev.filter((m) => m.type !== 'typing'));
-  }, []);
-
-  /* ── Parse tool_code quick_actions ──
-     Handles dict style, kwargs style, apostrophes, escaped quotes ── */
-  const parseToolCode = useCallback((text) => {
-    if (!text.includes('tool_code') && !text.includes('default_api.quick_actions')) return null;
-    try {
-      const actions = [];
-
-      // findVal: extract value for a key, handles both quote styles and escaped apostrophes
-      const findVal = (str, key) => {
-        var Q = "[\'\"]";
-        var dqM = str.match(new RegExp(Q + key + Q + "\\s*[=:]\\s*\"([^\"]*)\""));
-        if (dqM) return dqM[1];
-        var sqPat = new RegExp(Q + key + Q + "\\s*[=:]\\s*\'");
-        var sqM = str.match(sqPat);
-        if (sqM) {
-          var idx = str.indexOf(sqM[0]) + sqM[0].length;
-          var res = ""; var i = idx;
-          while (i < str.length) {
-            if (str[i] === "\\" && str[i+1] === "\'") { res += "\'"; i += 2; }
-            else if (str[i] === "\'") break;
-            else { res += str[i]; i++; }
-          }
-          if (res) return res;
-        }
-        var kwPat = new RegExp("\\b" + key + "\\s*=\\s*\'");
-        var kwM = str.match(kwPat);
-        if (kwM) {
-          var idx2 = str.indexOf(kwM[0]) + kwM[0].length;
-          var res2 = ""; var j = idx2;
-          while (j < str.length) {
-            if (str[j] === "\\" && str[j+1] === "\'") { res2 += "\'"; j += 2; }
-            else if (str[j] === "\'") break;
-            else { res2 += str[j]; j++; }
-          }
-          if (res2) return res2;
-        }
-        var kwdM = str.match(new RegExp("\\b" + key + "\\s*=\\s*\"([^\"]*)\""));
-        if (kwdM) return kwdM[1];
-        return null;
-      };;
-
-      // Split into per-action chunks (Safari-safe, no lookbehind)
+      };
       const marked = text.replace(/\{(\s*['"]?content['"]?\s*[=:])/g, '\x00{$1');
       const parts = marked.split(/QuickActionsPayloadActions\s*\(|\x00/);
-
       parts.forEach((part) => {
-        const c = findVal(part, 'content');
-        const u = findVal(part, 'utterance');
-        const d = findVal(part, 'description');
-        if (c && u) {
-          actions.push({ content: c.trim(), description: d ? d.trim() : '', utterance: u.trim() });
-        }
+        const c = fv(part, 'content'), u = fv(part, 'utterance'), d = fv(part, 'description');
+        if (c && u) actions.push({ content: c.trim(), description: d ? d.trim() : '', utterance: u.trim() });
       });
-
-      const sum = findVal(text, 'summary');
-      const summary = sum ? sum.trim() : 'What can I help you with?';
-      return actions.length > 0 ? { actions, summary } : null;
+      const sum = fv(text, 'summary');
+      return actions.length > 0 ? { actions, summary: sum ? sum.trim() : 'What can I help you with?' } : null;
     } catch (e) { return null; }
   }, []);
 
-  /* ── Extract Say: lines ── */
   const extractSayLines = useCallback((text) => {
-    const lines = [];
-    const re = /Say:\s*["'](.*?)["'](?=\s*(?:Say:|tool_code:|$))/gs;
-    let m;
-    while ((m = re.exec(text)) !== null) lines.push(m[1].trim());
+    const lines = [], re = /Say:\s*["'](.*?)["'](?=\s*(?:Say:|tool_code:|$))/gs;
+    let m; while ((m = re.exec(text)) !== null) lines.push(m[1].trim());
     return lines;
   }, []);
 
-  /* ── Detect fallback/compact headings ── */
   const isFallbackHeading = (h) => {
-    if (!h) return false;
-    const l = h.toLowerCase();
-    return l.startsWith('please type') || l.startsWith('please enter') ||
-           l.startsWith('type your') || l.startsWith('enter your');
+    if (!h) return false; const l = h.toLowerCase();
+    return l.startsWith('please type') || l.startsWith('please enter') || l.startsWith('type your') || l.startsWith('enter your');
   };
 
-  const showCombo = useCallback((actions, summary, forcedHeading, forcedSubtitle) => {
+  const showCombo = useCallback((actions, summary, fHead, fSub) => {
     setMessages((prev) => {
-      if (!forcedHeading) {
-        const lastBotIdx = [...prev].reverse().findIndex((m) => m.type === 'bot');
-        if (lastBotIdx !== -1) {
-          const realIdx = prev.length - 1 - lastBotIdx;
-          const h = prev[realIdx].text;
-          const without = prev.filter((_, i) => i !== realIdx);
-          return [...without, { type: 'combo', heading: h, actions, id: uid(), compact: isFallbackHeading(h) }];
+      if (!fHead) {
+        const li = [...prev].reverse().findIndex((m) => m.type === 'bot');
+        if (li !== -1) {
+          const ri = prev.length - 1 - li, h = prev[ri].text;
+          return [...prev.filter((_, i) => i !== ri), { type: 'combo', heading: h, actions, id: uid(), compact: isFallbackHeading(h) }];
         }
       }
-      const h = forcedHeading || summary || 'How can I help?';
-      return [...prev, { type: 'combo', heading: h, subtitle: forcedSubtitle, actions, id: uid(), compact: isFallbackHeading(h) }];
+      const h = fHead || summary || 'How can I help?';
+      return [...prev, { type: 'combo', heading: h, subtitle: fSub, actions, id: uid(), compact: isFallbackHeading(h) }];
     });
   }, []);
 
-  /* ── Process GECX outputs ── */
   const processOutputs = useCallback((outputs) => {
     removeTyping();
     outputs.forEach((output) => {
       if (output.text) {
         const text = output.text;
-
-        const toolCode = parseToolCode(text);
-        if (toolCode) {
-          const sayLines = extractSayLines(text);
-          if (sayLines.length >= 2) {
-            // First Say: = combo heading, second Say: = subtitle inside card (tagline)
-            // All stay inside one card — no separate bot bubbles
-            setMessages((prev) => [
-              ...prev,
-              {
-                type: 'combo',
-                heading: sayLines[0],
-                subtitle: sayLines[1],
-                actions: toolCode.actions,
-                id: uid(),
-                compact: false
-              }
-            ]);
-          } else if (sayLines.length === 1) {
-            setMessages((prev) => [
-              ...prev,
-              { type: 'combo', heading: sayLines[0], actions: toolCode.actions, id: uid(), compact: false }
-            ]);
-          } else {
-            showCombo(toolCode.actions, toolCode.summary);
-          }
+        const tc = parseToolCode(text);
+        if (tc) {
+          const sl = extractSayLines(text);
+          if (sl.length >= 2) setMessages((prev) => [...prev, { type: 'combo', heading: sl[0], subtitle: sl[1], actions: tc.actions, id: uid(), compact: false }]);
+          else if (sl.length === 1) setMessages((prev) => [...prev, { type: 'combo', heading: sl[0], actions: tc.actions, id: uid(), compact: false }]);
+          else showCombo(tc.actions, tc.summary);
           return;
         }
-
-        /* Narrated quick_actions fallback */
         if (text.includes('quick_actions') && text.includes('content:') && text.includes('utterance:')) {
-          const actions = [];
-          const re = /content:\s*["']?([^,}"'\n]+?)["']?\s*,\s*description:\s*["']?([^,}"'\n]+?)["']?\s*,\s*utterance:\s*["']?([^}"'\n\]]+?)["']?\s*\}/g;
-          let m;
-          while ((m = re.exec(text)) !== null) {
-            actions.push({ content: m[1].trim(), description: m[2].trim(), utterance: m[3].trim() });
-          }
-          const summaryM = text.match(/summary:\s*["']?([^,}"'\]\n]+?)["']?\s*[,}]/);
-          const summary = summaryM ? summaryM[1].trim() : 'What can I help you with?';
-          if (actions.length > 0) { showCombo(actions, summary); return; }
+          const acts = []; const re = /content:\s*["']?([^,}"'\n]+?)["']?\s*,\s*description:\s*["']?([^,}"'\n]+?)["']?\s*,\s*utterance:\s*["']?([^}"'\n\]]+?)["']?\s*\}/g;
+          let m; while ((m = re.exec(text)) !== null) acts.push({ content: m[1].trim(), description: m[2].trim(), utterance: m[3].trim() });
+          const sm = text.match(/summary:\s*["']?([^,}"'\]\n]+?)["']?\s*[,}]/);
+          if (acts.length > 0) { showCombo(acts, sm ? sm[1].trim() : 'What can I help you with?'); return; }
         }
-
-        if (text.includes('narration_checkpoint')) return;
-        if (text.includes('tool_code:')) return;
-
+        if (text.includes('narration_checkpoint') || text.includes('tool_code:')) return;
         addBot(text);
       }
-
       if (output.payload) {
         const p = output.payload;
-        if (p.type === 'quick_actions' && p.actions) {
-          showCombo(p.actions, p.summary);
-        }
+        if (p.type === 'quick_actions' && p.actions) showCombo(p.actions, p.summary);
         if (p.name === 'acn-form-input' && p.fields) {
           setActiveForm({ payload: p, id: uid() });
-          setMessages((prev) => prev.map((m) =>
-            m.type === 'combo' ? { ...m, compact: true } : m
-          ));
+          setMessages((prev) => prev.map((m) => m.type === 'combo' ? { ...m, compact: true } : m));
         }
-        if (p.name === 'acn-payment-carousel') {
-          setCarousel(p);
-        }
+        if (p.name === 'acn-payment-carousel') setCarousel(p);
       }
     });
   }, [removeTyping, addBot, showCombo, parseToolCode, extractSayLines]);
 
   useEffect(() => { setResponseHandler(processOutputs); }, [processOutputs]);
   useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
-
   useEffect(() => {
     if (!isOpen) return;
-    if (intent) {
-      setTimeout(() => { addUser(intent); showTyping(); gecxSend(intent); }, 600);
-    } else if (!sessionStarted) {
-      setSessionStarted(true);
-      showTyping();
-      initGecx();
-    }
+    if (intent) { setTimeout(() => { addUser(intent); showTyping(); gecxSend(intent); }, 600); }
+    else if (!sessionStarted) { setSessionStarted(true); showTyping(); initGecx(); }
     setTimeout(() => inputRef.current?.focus(), 300);
   }, [isOpen]); // eslint-disable-line
 
   const handleTileSelect = useCallback((action, comboId) => {
     setMessages((prev) => prev.filter((m) => m.id !== comboId));
-    addUser(action.content || action.utterance);
-    showTyping();
-    gecxSend(action.utterance || action.content);
+    addUser(action.content || action.utterance); showTyping(); gecxSend(action.utterance || action.content);
     setTimeout(() => { if (msgsRef.current) msgsRef.current.scrollTop = msgsRef.current.scrollHeight; }, 50);
   }, [addUser, showTyping]);
 
   const handleFormSubmit = useCallback((value, displayText) => {
     setActiveForm(null);
-    const show = displayText || value.split(':').slice(1).join(':') || value;
-    addUser(show);
-    showTyping();
-    gecxSend(value);
+    addUser(displayText || value.split(':').slice(1).join(':') || value);
+    showTyping(); gecxSend(value);
   }, [addUser, showTyping]);
 
   const sendMessage = useCallback(() => {
-    const text = inputVal.trim();
-    if (!text || isResponding) return;
-    setInputVal('');
-    addUser(text);
-    showTyping();
-    gecxSend(text);
+    const text = inputVal.trim(); if (!text || isResponding) return;
+    setInputVal(''); addUser(text); showTyping(); gecxSend(text);
   }, [inputVal, addUser, showTyping, isResponding]);
 
   const handleReset = useCallback(() => {
-    setMessages([]);
-    setCarousel(null);
-    setActiveForm(null);
-    setSessionStarted(false);
-    setInputVal('');
-    setIsResponding(false);
-    resetGecx();
-    setTimeout(() => showTyping(), 600);
-    onReset?.();
+    setMessages([]); setCarousel(null); setActiveForm(null);
+    setSessionStarted(false); setInputVal(''); setIsResponding(false);
+    if (respondingTimerRef.current) clearTimeout(respondingTimerRef.current);
+    resetGecx(); setTimeout(() => showTyping(), 600); onReset?.();
   }, [showTyping, onReset]);
 
   const toggleVoice = useCallback(() => {
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      alert('Voice input not supported in this browser.');
-      return;
-    }
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) { alert('Voice input not supported.'); return; }
     if (voiceActive) { recognitionRef.current?.stop(); setVoiceActive(false); return; }
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const rec = new SR();
-    rec.lang = 'en-CA';
-    rec.interimResults = false;
+    const rec = new SR(); rec.lang = 'en-CA'; rec.interimResults = false;
     rec.onresult = (e) => { setInputVal(e.results[0][0].transcript); setTimeout(sendMessage, 100); };
-    rec.onend = () => setVoiceActive(false);
-    rec.start();
-    recognitionRef.current = rec;
-    setVoiceActive(true);
+    rec.onend = () => setVoiceActive(false); rec.start(); recognitionRef.current = rec; setVoiceActive(true);
   }, [voiceActive, sendMessage]);
 
   const handleFileUpload = useCallback((e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    addUser(`📎 ${file.name}`);
-    showTyping();
-    gecxSend(`I am uploading a file: ${file.name}`);
-    e.target.value = '';
+    const file = e.target.files[0]; if (!file) return;
+    addUser('📎 ' + file.name); showTyping(); gecxSend('I am uploading a file: ' + file.name); e.target.value = '';
   }, [addUser, showTyping]);
 
-  const handleCarouselCta = useCallback((ctaValue) => {
-    setCarousel(null);
-    showTyping();
-    gecxSend(ctaValue);
-  }, [showTyping]);
+  const handleCarouselCta = useCallback((ctaValue) => { setCarousel(null); showTyping(); gecxSend(ctaValue); }, [showTyping]);
 
   return (
     <>
@@ -497,9 +228,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
           </chat-messenger-container>
         </chat-messenger>
       </div>
-
       <div className={`acn-chat-window${isOpen ? '' : ' closed'}`}>
-
         <div className="acn-chat-header">
           <div className="acn-chat-avatar">A</div>
           <div style={{ flex: 1 }}>
@@ -511,79 +240,47 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
           </div>
           <div className="acn-chat-header-btns">
             <button className="acn-icon-btn" onClick={handleReset} title="New conversation">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/>
-              </svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
             </button>
             <button className="acn-icon-btn" onClick={onClose} style={{ fontSize: 20 }}>&#x2715;</button>
           </div>
         </div>
-
         <div className="acn-messages" ref={msgsRef}>
           {messages.map((msg, idx) => {
-            const isConsecutiveBot = msg.type === 'bot' && messages[idx - 1]?.type === 'bot';
-            if (msg.type === 'bot') {
-              return (
-                <div key={msg.id} className={`acn-bot-bubble acn-msg-enter${isConsecutiveBot ? ' acn-bot-consecutive' : ''}`}>
-                  <BotText text={msg.text} />
-                </div>
-              );
-            }
-            if (msg.type === 'user') {
-              return <div key={msg.id} className="acn-user-bubble acn-msg-enter">{msg.text}</div>;
-            }
-            if (msg.type === 'typing') {
-              return <div key={msg.id} className="acn-typing"><span /><span /><span /></div>;
-            }
-            if (msg.type === 'combo') {
-              return (
-                <div key={msg.id} data-combo="true">
-                  <ComboCard
-                    heading={msg.heading}
-                    subtitle={msg.subtitle}
-                    actions={msg.actions}
-                    onSelect={(action) => handleTileSelect(action, msg.id)}
-                    compact={msg.compact === true}
-                  />
-                </div>
-              );
-            }
+            const isConsBot = msg.type === 'bot' && messages[idx - 1]?.type === 'bot';
+            if (msg.type === 'bot') return <div key={msg.id} className={`acn-bot-bubble acn-msg-enter${isConsBot ? ' acn-bot-consecutive' : ''}`}><BotText text={msg.text} /></div>;
+            if (msg.type === 'user') return <div key={msg.id} className="acn-user-bubble acn-msg-enter">{msg.text}</div>;
+            if (msg.type === 'typing') return <div key={msg.id} className="acn-typing"><span /><span /><span /></div>;
+            if (msg.type === 'combo') return (
+              <div key={msg.id} data-combo="true">
+                <ComboCard heading={msg.heading} subtitle={msg.subtitle} actions={msg.actions}
+                  onSelect={(a) => handleTileSelect(a, msg.id)} compact={msg.compact === true} />
+              </div>
+            );
             return null;
           })}
         </div>
-
         {activeForm && (
           <div style={{ padding: '0 12px 8px', borderTop: '1px solid #EBEBEB', background: '#fff' }}>
             <AcnFormWidget key={activeForm.id} payload={activeForm.payload} onSubmit={handleFormSubmit} />
           </div>
         )}
-
         <div className="acn-input-bar">
           <button className="acn-input-icon-btn" title="Attach file" onClick={() => document.getElementById('acn-file-input').click()}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
-            </svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
           </button>
           <input id="acn-file-input" type="file" style={{ display: 'none' }} onChange={handleFileUpload} />
-          <input ref={inputRef} className="acn-input" type="text"
-            placeholder="Type a message or select an option..." autoComplete="off"
-            value={inputVal} onChange={(e) => setInputVal(e.target.value)}
+          <input ref={inputRef} className="acn-input" type="text" placeholder="Type a message or select an option..."
+            autoComplete="off" value={inputVal} onChange={(e) => setInputVal(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && sendMessage()} disabled={isResponding} />
           <button className={`acn-input-icon-btn${voiceActive ? ' active' : ''}`} title="Voice input" onClick={toggleVoice} disabled={isResponding}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-              <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
-            </svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           </button>
           <button className={`acn-send-btn${isResponding ? ' disabled' : ''}`} onClick={sendMessage} disabled={isResponding}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
         </div>
       </div>
-
       {carousel && <Carousel data={carousel} onCta={handleCarouselCta} onClose={() => setCarousel(null)} />}
     </>
   );
