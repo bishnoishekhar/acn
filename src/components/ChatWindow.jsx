@@ -36,10 +36,10 @@ const stripEmoji = (h) => h ? h.replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27FF}\
 const isFH = (h) => {
   if (!h) return false;
   const l = stripEmoji(h).toLowerCase();
-  return l.startsWith('please type')       || l.startsWith('please enter') ||
-         l.startsWith('type your')         || l.startsWith('enter your')   ||
-         l.startsWith('or identify')       || l.startsWith('or choose')    ||
-         l.startsWith('or use a')          || l.startsWith('choose a different');
+  return l.startsWith('please type')     || l.startsWith('please enter') ||
+         l.startsWith('type your')       || l.startsWith('enter your')   ||
+         l.startsWith('or identify')     || l.startsWith('or choose')    ||
+         l.startsWith('or use a')        || l.startsWith('choose a different');
 };
 
 export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
@@ -54,10 +54,11 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   const inputRef = useRef(null);
   const recognitionRef = useRef(null);
   const respondingTimerRef = useRef(null);
-  // pendingHeadingRef: addBot sets this synchronously so showCombo can read it
-  // even before React commits the setState. Only first addBot per turn wins.
+  // Synchronous refs — bypass React batching for cross-event heading/subtitle
+  // Only first addBot per turn sets these (subsequent lines don't overwrite heading)
   const pendingHeadingRef = useRef(null);
-  // comboCreatedThisTurn: true once a combo is shown — prevents duplicate from payload
+  const pendingSubtitleRef = useRef(null);
+  // Prevents duplicate combo card when tool_code text AND payload both arrive
   const comboCreatedRef = useRef(false);
 
   /* ── Scroll ── */
@@ -84,9 +85,20 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   const addBot = useCallback((text) => {
     const clean = stripMarkdown(text);
     if (!clean) return;
-    // First addBot per turn sets the pending heading — later ones don't overwrite
-    if (!pendingHeadingRef.current) pendingHeadingRef.current = clean;
-    console.log('[ACN] addBot:', clean.slice(0, 50), '| pending:', pendingHeadingRef.current.slice(0, 40));
+
+    // Split on newline — first line = heading, rest = subtitle
+    // e.g. "👋 Welcome to ACN Bank!\nYour time matters..." → heading + subtitle
+    const lines = clean.split('\n').filter(Boolean);
+    const firstLine = lines[0];
+    const restLines = lines.slice(1).join(' ');
+
+    // Only first addBot per turn sets pending heading (don't overwrite with tagline etc)
+    if (!pendingHeadingRef.current) {
+      pendingHeadingRef.current = firstLine;
+      if (restLines) pendingSubtitleRef.current = restLines;
+    }
+
+    console.log('[ACN] addBot:', clean.slice(0, 60), '| heading:', pendingHeadingRef.current?.slice(0, 40));
     setMessages((prev) => [...prev, { type: 'bot', text: clean, id: uid() }]);
   }, []);
 
@@ -95,8 +107,9 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   }, []);
 
   const showTyping = useCallback(() => {
-    pendingHeadingRef.current = null;  // new user turn
-    comboCreatedRef.current = false;   // new user turn
+    pendingHeadingRef.current = null;
+    pendingSubtitleRef.current = null;
+    comboCreatedRef.current = false;
     setIsResponding(true);
     setMessages((prev) => {
       const f = prev.filter((m) => m.type !== 'typing');
@@ -116,7 +129,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   }, []);
 
   /* ── Parse tool_code quick_actions ──
-     Handles dict 'key':'val', kwargs key='val', apostrophes "I'm", Safari-safe ── */
+     Handles dict 'key':'val', kwargs key='val', apostrophes, Safari-safe ── */
   const parseToolCode = useCallback((text) => {
     if (!text.includes('tool_code') && !text.includes('default_api.quick_actions')) return null;
     try {
@@ -124,8 +137,8 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
       const fv = (str, key) => {
         const QK = "['\"]" + key + "['\"]";
         let m;
-        m = str.match(new RegExp(QK + '\\s*[=:]\\s*"([^"]*)"'));   if (m) return m[1];
-        m = str.match(new RegExp(QK + "\\s*[=:]\\s*'([^']*)'"));   if (m) return m[1];
+        m = str.match(new RegExp(QK + '\\s*[=:]\\s*"([^"]*)"'));  if (m) return m[1];
+        m = str.match(new RegExp(QK + "\\s*[=:]\\s*'([^']*)'"));  if (m) return m[1];
         m = str.match(new RegExp('\\b' + key + "\\s*=\\s*'([^']*)'"));  if (m) return m[1];
         m = str.match(new RegExp('\\b' + key + '\\s*=\\s*"([^"]*)"')); if (m) return m[1];
         return null;
@@ -152,61 +165,66 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
 
   /* ── Show combo card ──
      Heading priority:
-     1. forcedHeading (explicit, e.g. from Say: line)
-     2. pendingHeadingRef (set by addBot — bypasses React batching)
+     1. forcedHeading (from Say: line in tool_code path)
+     2. pendingHeadingRef — set by addBot, bypasses React batching
      3. last bot bubble in committed state
      4. summary string
-     Deduplication: comboCreatedRef prevents duplicate combo from payload
-     when tool_code text already created one ── */
+     Dedup: comboCreatedRef prevents duplicate when both text and payload fire ── */
   const showCombo = useCallback((actions, summary, forcedHeading, forcedSubtitle) => {
     const pending = pendingHeadingRef.current;
+    const pendingSub = pendingSubtitleRef.current;
     pendingHeadingRef.current = null;
+    pendingSubtitleRef.current = null;
 
-    console.log('[ACN] showCombo — pending:', pending?.slice(0, 40), '| summary:', summary?.slice(0, 40), '| comboCreated:', comboCreatedRef.current);
+    console.log('[ACN] showCombo — pending:', pending?.slice(0, 50), '| sub:', pendingSub?.slice(0, 30), '| comboCreated:', comboCreatedRef.current);
 
-    // If a combo was already created this turn (by tool_code text path),
-    // the payload arriving after would create a duplicate — skip it
+    // Prevent duplicate combo when tool_code text path already created one
     if (comboCreatedRef.current && !forcedHeading) {
-      console.log('[ACN] showCombo — skipped (duplicate prevention)');
+      console.log('[ACN] showCombo skipped — duplicate prevention');
       return;
     }
-
     comboCreatedRef.current = true;
 
     setMessages((prev) => {
       if (forcedHeading) {
         return [...prev, { type: 'combo', heading: forcedHeading, subtitle: forcedSubtitle, actions, id: uid(), compact: isFH(forcedHeading) }];
       }
-      // Use pending ref (bypasses React batching — always fresh)
+
+      // Use pending refs (synchronous — bypasses React batching)
       if (pending) {
-        // Remove matching bot bubble from state if it committed already (avoid duplicate text)
-        const li = [...prev].reverse().findIndex((m) => m.type === 'bot' && m.text === pending);
+        // Remove matching bot bubble from state to avoid duplicate text display
+        const li = [...prev].reverse().findIndex((m) => m.type === 'bot' && m.text.startsWith(pending));
         if (li !== -1) {
           const ri = prev.length - 1 - li;
           const without = prev.filter((_, i) => i !== ri);
-          return [...without, { type: 'combo', heading: pending, actions, id: uid(), compact: isFH(pending) }];
+          return [...without, { type: 'combo', heading: pending, subtitle: pendingSub, actions, id: uid(), compact: isFH(pending) }];
         }
-        return [...prev, { type: 'combo', heading: pending, actions, id: uid(), compact: isFH(pending) }];
+        return [...prev, { type: 'combo', heading: pending, subtitle: pendingSub, actions, id: uid(), compact: isFH(pending) }];
       }
+
       // Absorb last bot bubble from committed state
       const li = [...prev].reverse().findIndex((m) => m.type === 'bot');
       if (li !== -1) {
         const ri = prev.length - 1 - li;
         const h = prev[ri].text;
+        // If multiline bot bubble, split into heading/subtitle
+        const hLines = h.split('\n').filter(Boolean);
+        const heading = hLines[0];
+        const subtitle = hLines.slice(1).join(' ') || undefined;
         const without = prev.filter((_, i) => i !== ri);
-        return [...without, { type: 'combo', heading: h, actions, id: uid(), compact: isFH(h) }];
+        return [...without, { type: 'combo', heading, subtitle, actions, id: uid(), compact: isFH(heading) }];
       }
+
       // Final fallback
       const h = summary || 'What can I help you with?';
-      return [...prev, { type: 'combo', heading: h, subtitle: forcedSubtitle, actions, id: uid(), compact: isFH(h) }];
+      return [...prev, { type: 'combo', heading: h, actions, id: uid(), compact: isFH(h) }];
     });
   }, []);
 
   /* ── Process GECX outputs ──
-     Rules:
-     1. Skip if no visible content (intermediate tool calls)
-     2. Text pass first — sets pendingHeadingRef and renders bot bubbles
-     3. Payload pass second — showCombo reads pendingHeadingRef ── */
+     1. Skip if no visible content (intermediate tool calls — keep typing)
+     2. Text pass first — sets pending refs, renders bot bubbles
+     3. Payload pass second — showCombo reads pending refs ── */
   const processOutputs = useCallback((outputs) => {
     const hasVisible = outputs.some((o) => {
       if (o.payload) {
@@ -224,23 +242,23 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     if (!hasVisible) return;
 
     console.log('[ACN] processOutputs:', outputs.map(o =>
-      o.text ? 'text:' + o.text.slice(0, 50).replace(/\n/g, '\\n')
-      : o.payload ? 'payload:' + (o.payload.type || o.payload.name)
+      o.text ? 'TEXT:' + o.text.slice(0, 60).replace(/\n/g, '↵')
+      : o.payload ? 'PAYLOAD:' + (o.payload.type || o.payload.name)
       : 'other'
     ));
 
     removeTyping();
 
-    // Pass 1: text outputs
+    // Pass 1: text
     outputs.forEach((output) => {
       if (!output.text) return;
       const text = output.text;
 
+      // tool_code quick_actions (fallback path — agent ignored TOOL CALL EXECUTION RULE)
       const tc = parseToolCode(text);
       if (tc) {
         const sl = extractSayLines(text);
         if (sl.length >= 2) {
-          // Welcome: sl[0] = heading, sl[1] = subtitle inside card
           comboCreatedRef.current = true;
           setMessages((prev) => [...prev, {
             type: 'combo', heading: sl[0], subtitle: sl[1],
@@ -258,7 +276,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
         return;
       }
 
-      // Narrated quick_actions text fallback (older format)
+      // Narrated quick_actions text (very old fallback)
       if (text.includes('quick_actions') && text.includes('content:') && text.includes('utterance:')) {
         const acts = [];
         const re = /content:\s*["']?([^,}"'\n]+?)["']?\s*,\s*description:\s*["']?([^,}"'\n]+?)["']?\s*,\s*utterance:\s*["']?([^}"'\n\]]+?)["']?\s*\}/g;
@@ -273,14 +291,13 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
       addBot(text);
     });
 
-    // Pass 2: payload outputs — pendingHeadingRef set by Pass 1
+    // Pass 2: payload
     outputs.forEach((output) => {
       if (!output.payload) return;
       const p = output.payload;
       if (p.type === 'quick_actions' && p.actions) showCombo(p.actions, p.summary);
       if (p.name === 'acn-form-input' && p.fields) {
         setActiveForm({ payload: p, id: uid() });
-        // Mark all existing combo cards as compact — they're now fallback options
         setMessages((prev) => prev.map((m) => m.type === 'combo' ? { ...m, compact: true } : m));
       }
       if (p.name === 'acn-payment-carousel') setCarousel(p);
@@ -336,6 +353,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     setInputVal('');
     setIsResponding(false);
     pendingHeadingRef.current = null;
+    pendingSubtitleRef.current = null;
     comboCreatedRef.current = false;
     if (respondingTimerRef.current) clearTimeout(respondingTimerRef.current);
     resetGecx();
