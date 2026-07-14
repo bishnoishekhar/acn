@@ -42,13 +42,12 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
 
   /* ── Scroll to bottom ── */
   const scrollToBottom = useCallback(() => {
-    // Instant scroll — no smooth, fires multiple times to catch late renders
-    const el = msgsRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-    requestAnimationFrame(() => { if (msgsRef.current) msgsRef.current.scrollTop = msgsRef.current.scrollHeight; });
-    setTimeout(() => { if (msgsRef.current) msgsRef.current.scrollTop = msgsRef.current.scrollHeight; }, 50);
-    setTimeout(() => { if (msgsRef.current) msgsRef.current.scrollTop = msgsRef.current.scrollHeight; }, 200);
+    const snap = () => { if (msgsRef.current) msgsRef.current.scrollTop = msgsRef.current.scrollHeight; };
+    snap();
+    requestAnimationFrame(snap);
+    setTimeout(snap, 50);
+    setTimeout(snap, 150);
+    setTimeout(snap, 350); // catch combo card full render
   }, []);
 
   /* ── Add messages ── */
@@ -173,6 +172,12 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
         const p = output.payload;
         if (p.type === 'quick_actions' && p.actions) {
           showCombo(p.actions, p.summary);
+        }
+        if (p.name === 'acn-form-input' && p.fields) {
+          // Render form as a bot message prompting user to type
+          // The actual submission goes through the text input
+          const fieldHints = p.fields.map(f => f.placeholder || f.label).join(', ');
+          addBot(`${p.title || 'Please enter your details'}: ${fieldHints}`);
         }
         if (p.name === 'acn-payment-carousel') {
           setCarousel(p);
