@@ -79,25 +79,27 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   }, []);
 
   /* ── Parse Gemini 2.5 tool_code format ── */
+  /* Handles dict style: 'content': 'val' AND kwargs style: content='val' */
   const parseToolCode = useCallback((text) => {
     if (!text.includes('tool_code') && !text.includes('default_api.quick_actions')) return null;
     try {
       const actions = [];
-      const contentRe = /['"]content['"]\s*:\s*(['"])((?:(?!\1).)*)\1/g;
+      // Match both: content='value' (kwargs) and 'content': 'value' (dict)
+      const contentRe = /content\s*[=:]['"]+([^'"]+)['"]+[,)]/g;
       let m;
       while ((m = contentRe.exec(text)) !== null) {
-        const content = m[2].trim();
+        const content = m[1].trim();
         const snippet = text.slice(m.index, m.index + 600);
-        const uttRe = /['"]utterance['"]\s*:\s*(['"])((?:(?!\1).)*)\1/;
-        const descRe = /['"]description['"]\s*:\s*(['"])((?:(?!\1).)*)\1/;
+        const uttRe = /utterance\s*[=:]['"]+([^'"]+)['"]+[,)]/;
+        const descRe = /description\s*[=:]['"]+([^'"]+)['"]+[,)]/;
         const uttM = snippet.match(uttRe);
         const descM = snippet.match(descRe);
         if (content && uttM) {
-          actions.push({ content, description: descM ? descM[2].trim() : '', utterance: uttM[2].trim() });
+          actions.push({ content, description: descM ? descM[1].trim() : '', utterance: uttM[1].trim() });
         }
       }
-      const sumM = text.match(/['"]summary['"]\s*:\s*(['"])((?:(?!\1).)*)\1/);
-      const summary = sumM ? sumM[2].trim() : 'What can I help you with?';
+      const sumM = text.match(/summary\s*[=:]['"]+([^'"]+)['"]+[,)]/);
+      const summary = sumM ? sumM[1].trim() : 'What can I help you with?';
       return actions.length > 0 ? { actions, summary } : null;
     } catch (e) { return null; }
   }, []);
