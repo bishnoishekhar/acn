@@ -97,52 +97,187 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   }, []);
 
   /* ── Parse tool_code quick_actions ──
-     Handles: dict {'content': 'val'}, kwargs content='val',
-     apostrophes in values ("I'm a new customer"),
-     Safari-compatible (no lookbehind) ── */
+     Handles dict style, kwargs style, apostrophes, escaped quotes ── */
   const parseToolCode = useCallback((text) => {
     if (!text.includes('tool_code') && !text.includes('default_api.quick_actions')) return null;
     try {
       const actions = [];
 
-      // findVal: try double-quoted value first (handles apostrophes), then single-quoted
+      // findVal: extract value for a key, handles both quote styles and escaped apostrophes
       const findVal = (str, key) => {
-        // Try double-quoted value first — handles apostrophes e.g. "I'm a new customer"
-        const dq = new RegExp("['\"]\" + key + "[\'\"]\\s*[=:]\\s*\"([^\"]*)\"");
-        const dm = str.match(dq);
-        if (dm) return dm[1];
-        // Single-quoted value — scan manually to handle \' escapes
-        const sqStart = new RegExp("['\"]\" + key + "[\'\"]\\s*[=:]\\s*'");
-        const sm = str.match(sqStart);
-        if (sm) {
-          const idx = str.indexOf(sm[0]) + sm[0].length;
-          let res = ''; let i = idx;
-          while (i < str.length) {
-            if (str[i] === '\\' && str[i+1] === "'") { res += "'"; i += 2; }
-            else if (str[i] === "'") break;
-            else { res += str[i]; i++; }
+        // Double-quoted value: 'key': "value"
+        var dqRe = new RegExp("['\"]" + key + "['\"]\\s*[=:]\\s*\"([^\"]*)\"");
+        var dqM = str.match(dqRe);
+        if (dqM) return dqM[1];
+        // Single-quoted value: scan manually to handle apostrophes e.g. I\'m
+        var sqRe = new RegExp("['\"]" + key + "['\"]\\s*[=:]\\s*'");
+        var sqM = str.match(sqRe);
+        if (sqM) {
+          var si = str.indexOf(sqM[0]) + sqM[0].length;
+          var sr = ""; var ii = si;
+          while (ii < str.length) {
+            if (str[ii] === "\\" && str[ii+1] === "'") { sr += "'"; ii += 2; }
+            else if (str[ii] === "'") break;
+            else { sr += str[ii]; ii++; }
           }
-          if (res) return res;
+          if (sr) return sr;
         }
-        // kwargs without quotes on key: key='value' (with escape handling)
-        const kwStart = new RegExp("\\b" + key + "\\s*=\\s*'");
-        const km = str.match(kwStart);
-        if (km) {
-          const idx = str.indexOf(km[0]) + km[0].length;
-          let res = ''; let i = idx;
-          while (i < str.length) {
-            if (str[i] === '\\' && str[i+1] === "'") { res += "'"; i += 2; }
-            else if (str[i] === "'") break;
-            else { res += str[i]; i++; }
+        // kwargs: key='value'
+        var kwRe = new RegExp("\\b" + key + "\\s*=\\s*'");
+        var kwM = str.match(kwRe);
+        if (kwM) {
+          var ki = str.indexOf(kwM[0]) + kwM[0].length;
+          var kr = ""; var jj = ki;
+          while (jj < str.length) {
+            if (str[jj] === "\\" && str[jj+1] === "'") { kr += "'"; jj += 2; }
+            else if (str[jj] === "'") break;
+            else { kr += str[jj]; jj++; }
           }
-          if (res) return res;
+          if (kr) return kr;
         }
         // kwargs: key="value"
-        const kd = new RegExp("\\b" + key + "\\s*=\\s*\"([^\"]*)\"");
-        const kdm = str.match(kd);
-        if (kdm) return kdm[1];
+        var kdRe = new RegExp("\\b" + key + "\\s*=\\s*\"([^\"]*)\"");
+        var kdM = str.match(kdRe);
+        if (kdM) return kdM[1];
         return null;
-      };
+      }; { useState, useEffect, useRef, useCallback } from 'react';
+import { initGecx, resetGecx, gecxSend, setResponseHandler } from './gecx';
+import ComboCard from './ComboCard';
+import AcnFormWidget from './AcnFormWidget';
+import Carousel from './Carousel';
+
+function stripMarkdown(text) {
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/^#{1,3}\s+/gm, '')
+    .trim();
+}
+
+function BotText({ text }) {
+  const lines = text.split('\n').filter(Boolean);
+  if (lines.length <= 1) return <>{text}</>;
+  return (
+    <>
+      {lines.map((line, i) => (
+        <span key={i} style={{ display: 'block', marginBottom: i < lines.length - 1 ? '6px' : 0 }}>
+          {line}
+        </span>
+      ))}
+    </>
+  );
+}
+
+let _idCounter = 0;
+const uid = () => ++_idCounter;
+
+export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
+  const [messages, setMessages] = useState([]);
+  const [inputVal, setInputVal] = useState('');
+  const [carousel, setCarousel] = useState(null);
+  const [activeForm, setActiveForm] = useState(null);
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [sessionStarted, setSessionStarted] = useState(false);
+  const [isResponding, setIsResponding] = useState(false);
+  const msgsRef = useRef(null);
+  const inputRef = useRef(null);
+  const recognitionRef = useRef(null);
+
+  /* ── Scroll to bottom ── */
+  const scrollToBottom = useCallback(() => {
+    const snap = () => {
+      if (!msgsRef.current) return;
+      const combo = msgsRef.current.querySelector('[data-combo="true"]:last-child');
+      if (combo) {
+        const comboBottom = combo.offsetTop + combo.offsetHeight;
+        const viewBottom = msgsRef.current.scrollTop + msgsRef.current.clientHeight;
+        if (comboBottom > viewBottom) {
+          msgsRef.current.scrollTop = comboBottom - msgsRef.current.clientHeight + 16;
+        }
+      } else {
+        msgsRef.current.scrollTop = msgsRef.current.scrollHeight;
+      }
+    };
+    snap();
+    requestAnimationFrame(snap);
+    setTimeout(snap, 50);
+    setTimeout(snap, 200);
+    setTimeout(snap, 400);
+  }, []);
+
+  /* ── Add messages ── */
+  const addBot = useCallback((text) => {
+    const clean = stripMarkdown(text);
+    if (!clean) return;
+    setMessages((prev) => [...prev, { type: 'bot', text: clean, id: uid() }]);
+  }, []);
+
+  const addUser = useCallback((text) => {
+    setMessages((prev) => [...prev, { type: 'user', text, id: uid() }]);
+  }, []);
+
+  const respondingTimerRef = useRef(null);
+
+  const showTyping = useCallback(() => {
+    setIsResponding(true);
+    setMessages((prev) => {
+      const filtered = prev.filter((m) => m.type !== 'typing');
+      return [...filtered, { type: 'typing', id: uid() }];
+    });
+    // Safety: clear responding state after 12s if no response received
+    if (respondingTimerRef.current) clearTimeout(respondingTimerRef.current);
+    respondingTimerRef.current = setTimeout(() => {
+      setIsResponding(false);
+      setMessages((prev) => prev.filter((m) => m.type !== 'typing'));
+    }, 12000);
+  }, []);
+
+  const removeTyping = useCallback(() => {
+    if (respondingTimerRef.current) clearTimeout(respondingTimerRef.current);
+    setIsResponding(false);
+    setMessages((prev) => prev.filter((m) => m.type !== 'typing'));
+  }, []);
+
+  /* ── Parse tool_code quick_actions ──
+     Handles dict style, kwargs style, apostrophes, escaped quotes ── */
+  const parseToolCode = useCallback((text) => {
+    if (!text.includes('tool_code') && !text.includes('default_api.quick_actions')) return null;
+    try {
+      const actions = [];
+
+      // findVal: extract value for a key, handles both quote styles and escaped apostrophes
+      const findVal = (str, key) => {
+        var Q = "[\'\"]";
+        var dqM = str.match(new RegExp(Q + key + Q + "\\s*[=:]\\s*\"([^\"]*)\""));
+        if (dqM) return dqM[1];
+        var sqPat = new RegExp(Q + key + Q + "\\s*[=:]\\s*\'");
+        var sqM = str.match(sqPat);
+        if (sqM) {
+          var idx = str.indexOf(sqM[0]) + sqM[0].length;
+          var res = ""; var i = idx;
+          while (i < str.length) {
+            if (str[i] === "\\" && str[i+1] === "\'") { res += "\'"; i += 2; }
+            else if (str[i] === "\'") break;
+            else { res += str[i]; i++; }
+          }
+          if (res) return res;
+        }
+        var kwPat = new RegExp("\\b" + key + "\\s*=\\s*\'");
+        var kwM = str.match(kwPat);
+        if (kwM) {
+          var idx2 = str.indexOf(kwM[0]) + kwM[0].length;
+          var res2 = ""; var j = idx2;
+          while (j < str.length) {
+            if (str[j] === "\\" && str[j+1] === "\'") { res2 += "\'"; j += 2; }
+            else if (str[j] === "\'") break;
+            else { res2 += str[j]; j++; }
+          }
+          if (res2) return res2;
+        }
+        var kwdM = str.match(new RegExp("\\b" + key + "\\s*=\\s*\"([^\"]*)\""));
+        if (kwdM) return kwdM[1];
+        return null;
+      };;
 
       // Split into per-action chunks (Safari-safe, no lookbehind)
       const marked = text.replace(/\{(\s*['"]?content['"]?\s*[=:])/g, '\x00{$1');
