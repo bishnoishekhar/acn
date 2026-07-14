@@ -97,21 +97,32 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     if (!text.includes('tool_code') && !text.includes('default_api.quick_actions')) return null;
     try {
       const actions = [];
-      // Match both: content='value' (kwargs) and 'content': 'value' (dict)
-      const contentRe = /content\s*[=:]['"]+([^'"]+)['"]+[,)]/g;
-      let m;
-      while ((m = contentRe.exec(text)) !== null) {
+
+      // Strategy: find each action block by locating 'content' keys,
+      // then search forward up to the next 'content' key for utterance/description
+      const contentRe = /['"]?content['"]?\s*[=:]\s*['"]([^'"]+)['"]/g;
+      const allContentMatches = [...text.matchAll(contentRe)];
+
+      allContentMatches.forEach((m, i) => {
         const content = m[1].trim();
-        const snippet = text.slice(m.index, m.index + 600);
-        const uttRe = /utterance\s*[=:]['"]+([^'"]+)['"]+[,)]/;
-        const descRe = /description\s*[=:]['"]+([^'"]+)['"]+[,)]/;
-        const uttM = snippet.match(uttRe);
-        const descM = snippet.match(descRe);
+        // Snippet from this content to next content (or end of text)
+        const nextMatch = allContentMatches[i + 1];
+        const end = nextMatch ? nextMatch.index : Math.min(m.index + 800, text.length);
+        const snippet = text.slice(m.index, end);
+
+        const uttM = snippet.match(/['"]?utterance['"]?\s*[=:]\s*['"]([^'"]+)['"]/);
+        const descM = snippet.match(/['"]?description['"]?\s*[=:]\s*['"]([^'"]+)['"]/);
+
         if (content && uttM) {
-          actions.push({ content, description: descM ? descM[1].trim() : '', utterance: uttM[1].trim() });
+          actions.push({
+            content,
+            description: descM ? descM[1].trim() : '',
+            utterance: uttM[1].trim()
+          });
         }
-      }
-      const sumM = text.match(/summary\s*[=:]['"]+([^'"]+)['"]+[,)]/);
+      });
+
+      const sumM = text.match(/['"]?summary['"]?\s*[=:]\s*['"]([^'"]+)['"]/);
       const summary = sumM ? sumM[1].trim() : 'What can I help you with?';
       return actions.length > 0 ? { actions, summary } : null;
     } catch (e) { return null; }
