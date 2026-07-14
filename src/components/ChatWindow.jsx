@@ -34,7 +34,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   const [messages, setMessages] = useState([]);
   const [inputVal, setInputVal] = useState('');
   const [carousel, setCarousel] = useState(null);
-  const [activeForm, setActiveForm] = useState(null); // {payload, id}
+  const [activeForm, setActiveForm] = useState(null);
   const [voiceActive, setVoiceActive] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [isResponding, setIsResponding] = useState(false);
@@ -44,11 +44,8 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
 
   /* ── Scroll to bottom ── */
   const scrollToBottom = useCallback(() => {
-    const el = msgsRef.current;
-    if (!el) return;
-    const doScroll = () => {
+    const snap = () => {
       if (!msgsRef.current) return;
-      // If there's a combo card, scroll so its bottom edge is visible
       const combo = msgsRef.current.querySelector('[data-combo="true"]:last-child');
       if (combo) {
         const comboBottom = combo.offsetTop + combo.offsetHeight;
@@ -60,11 +57,11 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
         msgsRef.current.scrollTop = msgsRef.current.scrollHeight;
       }
     };
-    doScroll();
-    requestAnimationFrame(doScroll);
-    setTimeout(doScroll, 50);
-    setTimeout(doScroll, 200);
-    setTimeout(doScroll, 400);
+    snap();
+    requestAnimationFrame(snap);
+    setTimeout(snap, 50);
+    setTimeout(snap, 200);
+    setTimeout(snap, 400);
   }, []);
 
   /* ── Add messages ── */
@@ -91,26 +88,32 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     setMessages((prev) => prev.filter((m) => m.type !== 'typing'));
   }, []);
 
-  /* ── Parse Gemini 2.5 tool_code format ── */
-  /* Handles QuickActionsPayloadActions(content='...') and dict {'content': '...'} */
+  /* ── Parse Gemini 2.5 tool_code format ──
+     Handles both dict 'content': 'val' AND kwargs content='val'
+     AND apostrophes in values (e.g. "I'm a new customer")
+     Safari-compatible: no lookbehind assertions ── */
   const parseToolCode = useCallback((text) => {
     if (!text.includes('tool_code') && !text.includes('default_api.quick_actions')) return null;
     try {
       const actions = [];
-      // Find all content= or 'content': occurrences and their values
-      // Using simple string splitting approach to avoid backreference issues
+
+      // findVal: find the value for a given key in a string snippet
+      // Handles both key='value' and key: 'value' and key="value"
       const findVal = (str, key) => {
         const re = new RegExp(key + "\\s*[=:]\\s*(['\"])");
         const m = str.match(re);
         if (!m) return null;
         const quote = m[1];
-        const after = str.slice(str.indexOf(m[0]) + m[0].length);
+        const startIdx = str.indexOf(m[0]) + m[0].length;
+        const after = str.slice(startIdx);
         const end = after.indexOf(quote);
         return end === -1 ? null : after.slice(0, end);
       };
 
-      // Split by QuickActionsPayloadActions( or by action object {
-      const parts = text.split(/QuickActionsPayloadActions\s*\(|(?<=\{)(?=\s*['"]?content['"]?\s*[=:])/);
+      // Split into per-action chunks using marker injection (Safari compat, no lookbehind)
+      const marked = text.replace(/\{(\s*['"]?content['"]?\s*[=:])/g, '\x00{$1');
+      const parts = marked.split(/QuickActionsPayloadActions\s*\(|\x00/);
+
       parts.forEach((part) => {
         const c = findVal(part, 'content');
         const u = findVal(part, 'utterance');
@@ -135,27 +138,31 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     return lines;
   }, []);
 
-  // Headings that indicate fallback tiles (user needs to TYPE, tiles are change-of-mind)
-  const FALLBACK_HEADING_PREFIXES = [
-    'please type', 'please enter', 'type your', 'enter your'
-  ];
-  const isFallbackHeading = (h) =>
-    h && FALLBACK_HEADING_PREFIXES.some((p) => h.toLowerCase().startsWith(p));
+  /* ── Fallback heading detection ──
+     If heading starts with "Please type/enter", tiles are change-of-mind fallbacks → compact */
+  const isFallbackHeading = (h) => {
+    if (!h) return false;
+    const lower = h.toLowerCase();
+    return lower.startsWith('please type') ||
+           lower.startsWith('please enter') ||
+           lower.startsWith('type your') ||
+           lower.startsWith('enter your');
+  };
 
-  const showCombo = useCallback((actions, summary, heading) => {
+  const showCombo = useCallback((actions, summary, forcedHeading) => {
     setMessages((prev) => {
-      // If there's a recent bot bubble, absorb it as the heading
-      const lastBotIdx = [...prev].reverse().findIndex((m) => m.type === 'bot');
-      if (!heading && lastBotIdx !== -1) {
-        const realIdx = prev.length - 1 - lastBotIdx;
-        const h = prev[realIdx].text;
-        const without = prev.filter((_, i) => i !== realIdx);
-        const compact = isFallbackHeading(h);
-        return [...without, { type: 'combo', heading: h, actions, id: uid(), compact }];
+      if (!forcedHeading) {
+        // Absorb last bot bubble as heading
+        const lastBotIdx = [...prev].reverse().findIndex((m) => m.type === 'bot');
+        if (lastBotIdx !== -1) {
+          const realIdx = prev.length - 1 - lastBotIdx;
+          const h = prev[realIdx].text;
+          const without = prev.filter((_, i) => i !== realIdx);
+          return [...without, { type: 'combo', heading: h, actions, id: uid(), compact: isFallbackHeading(h) }];
+        }
       }
-      const h = heading || summary || 'How can I help?';
-      const compact = isFallbackHeading(h);
-      return [...prev, { type: 'combo', heading: h, actions, id: uid(), compact }];
+      const h = forcedHeading || summary || 'How can I help?';
+      return [...prev, { type: 'combo', heading: h, actions, id: uid(), compact: isFallbackHeading(h) }];
     });
   }, []);
 
@@ -166,26 +173,25 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
       if (output.text) {
         const text = output.text;
 
-        /* Gemini tool_code + quick_actions */
+        /* tool_code / quick_actions */
         const toolCode = parseToolCode(text);
         if (toolCode) {
           const sayLines = extractSayLines(text);
           if (sayLines.length >= 2) {
-            // Multiple Say: lines:
-            // - First line becomes the combo card heading (e.g. "👋 Welcome to ACN Bank!")
-            // - Middle lines become bot bubbles above the card (e.g. tagline)
-            // - Last bot bubble before combo is NOT absorbed (we pass heading explicitly)
-            const heading = sayLines[0];
+            // e.g. orchestrator welcome:
+            // sayLines[0] = "👋 Welcome to ACN Bank!"  → combo heading
+            // sayLines[1] = "Your time matters..."     → bot bubble ABOVE combo
+            // We want: bot bubble first, then combo card below it
+            // So: render tagline lines as bot bubbles, then add combo with first line as heading
             sayLines.slice(1).forEach((line) => addBot(line));
             setMessages((prev) => [
               ...prev,
-              { type: 'combo', heading, actions: toolCode.actions, id: uid() }
+              { type: 'combo', heading: sayLines[0], actions: toolCode.actions, id: uid(), compact: false }
             ]);
           } else if (sayLines.length === 1) {
-            // Single Say: line becomes combo heading
             setMessages((prev) => [
               ...prev,
-              { type: 'combo', heading: sayLines[0], actions: toolCode.actions, id: uid() }
+              { type: 'combo', heading: sayLines[0], actions: toolCode.actions, id: uid(), compact: false }
             ]);
           } else {
             showCombo(toolCode.actions, toolCode.summary);
@@ -219,9 +225,8 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
           showCombo(p.actions, p.summary);
         }
         if (p.name === 'acn-form-input' && p.fields) {
-          // Render native form widget — mark any subsequent quick_actions as compact
           setActiveForm({ payload: p, id: uid() });
-          // Mark the most recent combo card as compact (it's the fallback options)
+          // Mark existing combo cards as compact — they're now fallback options
           setMessages((prev) => prev.map((m) =>
             m.type === 'combo' ? { ...m, compact: true } : m
           ));
@@ -266,14 +271,13 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     addUser(action.content || action.utterance);
     showTyping();
     gecxSend(action.utterance || action.content);
-    // Force scroll after tile selection — combo removal can shift layout
     setTimeout(() => { if (msgsRef.current) msgsRef.current.scrollTop = msgsRef.current.scrollHeight; }, 50);
   }, [addUser, showTyping]);
 
   /* ── Form submit ── */
   const handleFormSubmit = useCallback((value, displayText) => {
     setActiveForm(null);
-    // Show masked display text if provided (e.g. for PIN), otherwise show value after prefix
+    // displayText is pre-masked by AcnFormWidget (e.g. "••••" for PIN/OTP)
     const show = displayText || value.split(':').slice(1).join(':') || value;
     addUser(show);
     showTyping();
@@ -417,15 +421,13 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
               );
             }
             if (msg.type === 'combo') {
-              // Compact style when this is a fallback alongside an active form widget
-              const isCompact = msg.compact === true;
               return (
                 <div key={msg.id} data-combo="true">
                   <ComboCard
                     heading={msg.heading}
                     actions={msg.actions}
                     onSelect={(action) => handleTileSelect(action, msg.id)}
-                    compact={isCompact}
+                    compact={msg.compact === true}
                   />
                 </div>
               );
