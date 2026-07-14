@@ -74,15 +74,24 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     setMessages((prev) => [...prev, { type: 'user', text, id: uid() }]);
   }, []);
 
+  const respondingTimerRef = useRef(null);
+
   const showTyping = useCallback(() => {
     setIsResponding(true);
     setMessages((prev) => {
       const filtered = prev.filter((m) => m.type !== 'typing');
       return [...filtered, { type: 'typing', id: uid() }];
     });
+    // Safety: clear responding state after 12s if no response received
+    if (respondingTimerRef.current) clearTimeout(respondingTimerRef.current);
+    respondingTimerRef.current = setTimeout(() => {
+      setIsResponding(false);
+      setMessages((prev) => prev.filter((m) => m.type !== 'typing'));
+    }, 12000);
   }, []);
 
   const removeTyping = useCallback(() => {
+    if (respondingTimerRef.current) clearTimeout(respondingTimerRef.current);
     setIsResponding(false);
     setMessages((prev) => prev.filter((m) => m.type !== 'typing'));
   }, []);
@@ -98,18 +107,36 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
 
       // findVal: try double-quoted value first (handles apostrophes), then single-quoted
       const findVal = (str, key) => {
-        // 'key': "value" or 'key'="value"
-        const dq = new RegExp("['\"]" + key + "['\"]\\s*[=:]\\s*\"([^\"]*)\"");
+        // Try double-quoted value first — handles apostrophes e.g. "I'm a new customer"
+        const dq = new RegExp("['\"]\" + key + "[\'\"]\\s*[=:]\\s*\"([^\"]*)\"");
         const dm = str.match(dq);
         if (dm) return dm[1];
-        // 'key': 'value' or 'key'='value'
-        const sq = new RegExp("['\"]" + key + "['\"]\\s*[=:]\\s*'([^']*)'");
-        const sm = str.match(sq);
-        if (sm) return sm[1];
-        // kwargs without quotes on key: key='value'
-        const kw = new RegExp("\\b" + key + "\\s*=\\s*'([^']*)'");
-        const km = str.match(kw);
-        if (km) return km[1];
+        // Single-quoted value — scan manually to handle \' escapes
+        const sqStart = new RegExp("['\"]\" + key + "[\'\"]\\s*[=:]\\s*'");
+        const sm = str.match(sqStart);
+        if (sm) {
+          const idx = str.indexOf(sm[0]) + sm[0].length;
+          let res = ''; let i = idx;
+          while (i < str.length) {
+            if (str[i] === '\\' && str[i+1] === "'") { res += "'"; i += 2; }
+            else if (str[i] === "'") break;
+            else { res += str[i]; i++; }
+          }
+          if (res) return res;
+        }
+        // kwargs without quotes on key: key='value' (with escape handling)
+        const kwStart = new RegExp("\\b" + key + "\\s*=\\s*'");
+        const km = str.match(kwStart);
+        if (km) {
+          const idx = str.indexOf(km[0]) + km[0].length;
+          let res = ''; let i = idx;
+          while (i < str.length) {
+            if (str[i] === '\\' && str[i+1] === "'") { res += "'"; i += 2; }
+            else if (str[i] === "'") break;
+            else { res += str[i]; i++; }
+          }
+          if (res) return res;
+        }
         // kwargs: key="value"
         const kd = new RegExp("\\b" + key + "\\s*=\\s*\"([^\"]*)\"");
         const kdm = str.match(kd);
