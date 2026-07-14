@@ -126,6 +126,13 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     return lines;
   }, []);
 
+  // Headings that indicate fallback tiles (user needs to TYPE, tiles are change-of-mind)
+  const FALLBACK_HEADING_PREFIXES = [
+    'please type', 'please enter', 'type your', 'enter your'
+  ];
+  const isFallbackHeading = (h) =>
+    h && FALLBACK_HEADING_PREFIXES.some((p) => h.toLowerCase().startsWith(p));
+
   const showCombo = useCallback((actions, summary, heading) => {
     setMessages((prev) => {
       // If there's a recent bot bubble, absorb it as the heading
@@ -134,9 +141,12 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
         const realIdx = prev.length - 1 - lastBotIdx;
         const h = prev[realIdx].text;
         const without = prev.filter((_, i) => i !== realIdx);
-        return [...without, { type: 'combo', heading: h, actions, id: uid() }];
+        const compact = isFallbackHeading(h);
+        return [...without, { type: 'combo', heading: h, actions, id: uid(), compact }];
       }
-      return [...prev, { type: 'combo', heading: heading || summary || 'How can I help?', actions, id: uid() }];
+      const h = heading || summary || 'How can I help?';
+      const compact = isFallbackHeading(h);
+      return [...prev, { type: 'combo', heading: h, actions, id: uid(), compact }];
     });
   }, []);
 
