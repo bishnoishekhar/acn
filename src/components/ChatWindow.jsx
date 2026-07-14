@@ -92,7 +92,8 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   /* ── Extract Say: lines from mixed text+tool_code block ── */
   const extractSayLines = useCallback((text) => {
     const lines = [];
-    const re = /Say:\s*["']([^"']+)["']/g;
+    // Match Say: "..." or Say: '...' allowing apostrophes inside by finding closing quote before tool_code or next Say:
+    const re = /Say:\s*["'](.*?)["'](?=\s*(?:Say:|tool_code:|$))/gs;
     let m;
     while ((m = re.exec(text)) !== null) lines.push(m[1].trim());
     return lines;
@@ -122,8 +123,17 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
         const toolCode = parseToolCode(text);
         if (toolCode) {
           const sayLines = extractSayLines(text);
-          sayLines.forEach((line) => addBot(line));
-          showCombo(toolCode.actions, toolCode.summary);
+          // Use first Say: line as combo heading so welcome + tiles stay together
+          // Render any additional Say: lines as separate bubbles
+          if (sayLines.length > 0) {
+            sayLines.slice(1).forEach((line) => addBot(line));
+            setMessages((prev) => [
+              ...prev,
+              { type: 'combo', heading: sayLines[0], actions: toolCode.actions, id: uid() }
+            ]);
+          } else {
+            showCombo(toolCode.actions, toolCode.summary);
+          }
           return;
         }
 
