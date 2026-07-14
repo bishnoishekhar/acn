@@ -191,8 +191,12 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
           showCombo(p.actions, p.summary);
         }
         if (p.name === 'acn-form-input' && p.fields) {
-          // Render native form widget
+          // Render native form widget — mark any subsequent quick_actions as compact
           setActiveForm({ payload: p, id: uid() });
+          // Mark the most recent combo card as compact (it's the fallback options)
+          setMessages((prev) => prev.map((m) =>
+            m.type === 'combo' ? { ...m, compact: true } : m
+          ));
         }
         if (p.name === 'acn-payment-carousel') {
           setCarousel(p);
@@ -383,12 +387,15 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
               );
             }
             if (msg.type === 'combo') {
+              // Compact style when this is a fallback alongside an active form widget
+              const isCompact = msg.compact === true;
               return (
                 <div key={msg.id} data-combo="true">
                   <ComboCard
                     heading={msg.heading}
                     actions={msg.actions}
                     onSelect={(action) => handleTileSelect(action, msg.id)}
+                    compact={isCompact}
                   />
                 </div>
               );
