@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { initGecx, resetGecx, gecxSend, setResponseHandler } from './gecx';
 import ComboCard from './ComboCard';
+import AcnFormWidget from './AcnFormWidget';
 import Carousel from './Carousel';
 
 function stripMarkdown(text) {
@@ -33,6 +34,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   const [messages, setMessages] = useState([]);
   const [inputVal, setInputVal] = useState('');
   const [carousel, setCarousel] = useState(null);
+  const [activeForm, setActiveForm] = useState(null); // {payload, id}
   const [voiceActive, setVoiceActive] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [isResponding, setIsResponding] = useState(false);
@@ -189,10 +191,8 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
           showCombo(p.actions, p.summary);
         }
         if (p.name === 'acn-form-input' && p.fields) {
-          // Render form as a bot message prompting user to type
-          // The actual submission goes through the text input
-          const fieldHints = p.fields.map(f => f.placeholder || f.label).join(', ');
-          addBot(`${p.title || 'Please enter your details'}: ${fieldHints}`);
+          // Render native form widget
+          setActiveForm({ payload: p, id: uid() });
         }
         if (p.name === 'acn-payment-carousel') {
           setCarousel(p);
@@ -238,6 +238,14 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     setTimeout(() => { if (msgsRef.current) msgsRef.current.scrollTop = msgsRef.current.scrollHeight; }, 50);
   }, [addUser, showTyping]);
 
+  /* ── Form submit ── */
+  const handleFormSubmit = useCallback((value) => {
+    setActiveForm(null);
+    addUser(value.split(':').slice(1).join(':') || value); // show friendly value not prefix
+    showTyping();
+    gecxSend(value);
+  }, [addUser, showTyping]);
+
   /* ── Send message ── */
   const sendMessage = useCallback(() => {
     const text = inputVal.trim();
@@ -252,6 +260,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   const handleReset = useCallback(() => {
     setMessages([]);
     setCarousel(null);
+    setActiveForm(null);
     setSessionStarted(false);
     setInputVal('');
     setIsResponding(false);
@@ -387,6 +396,17 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
             return null;
           })}
         </div>
+
+        {/* Form widget — renders above input bar when active */}
+        {activeForm && (
+          <div style={{ padding: '0 12px 8px', borderTop: '1px solid #EBEBEB', background: '#fff' }}>
+            <AcnFormWidget
+              key={activeForm.id}
+              payload={activeForm.payload}
+              onSubmit={handleFormSubmit}
+            />
+          </div>
+        )}
 
         {/* Input bar */}
         <div className="acn-input-bar">
