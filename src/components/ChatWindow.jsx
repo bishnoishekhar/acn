@@ -54,6 +54,8 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   const inputRef = useRef(null);
   const recognitionRef = useRef(null);
   const respondingTimerRef = useRef(null);
+  // After text-only response, auto-clear isResponding if no combo/form arrives in 4s
+  const finalTimerRef = useRef(null);
   // Synchronous refs — bypass React batching for cross-event heading/subtitle
   // Only first addBot per turn sets these (subsequent lines don't overwrite heading)
   const pendingHeadingRef = useRef(null);
@@ -124,8 +126,20 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
 
   const removeTyping = useCallback(() => {
     if (respondingTimerRef.current) clearTimeout(respondingTimerRef.current);
+    if (finalTimerRef.current) clearTimeout(finalTimerRef.current);
     setIsResponding(false);
     setMessages((prev) => prev.filter((m) => m.type !== 'typing'));
+  }, []);
+
+  // clearTypingBubble: removes dots but keeps isResponding=true
+  // Used for text-only responses where agent is still processing
+  const clearTypingBubble = useCallback(() => {
+    setMessages((prev) => prev.filter((m) => m.type !== 'typing'));
+    // Safety: if no combo/form arrives within 4s, release input anyway
+    if (finalTimerRef.current) clearTimeout(finalTimerRef.current);
+    finalTimerRef.current = setTimeout(() => {
+      setIsResponding(false);
+    }, 8000);
   }, []);
 
   /* ── Parse tool_code quick_actions ──
@@ -247,7 +261,18 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
       : 'other'
     ));
 
-    removeTyping();
+    // Determine if this response is truly final (has actionable widget)
+    // or just an interim text message (agent still processing)
+    const hasFinalWidget = outputs.some((o) => o.payload && (
+      o.payload.type === 'quick_actions' ||
+      o.payload.name === 'acn-form-input' ||
+      o.payload.name === 'acn-payment-carousel'
+    ));
+    if (hasFinalWidget) {
+      removeTyping(); // clears isResponding — agent is done
+    } else {
+      clearTypingBubble(); // keeps isResponding=true — agent still processing
+    }
 
     // Pass 1: text
     outputs.forEach((output) => {
@@ -302,7 +327,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
       }
       if (p.name === 'acn-payment-carousel') setCarousel(p);
     });
-  }, [removeTyping, addBot, showCombo, parseToolCode, extractSayLines]);
+  }, [removeTyping, clearTypingBubble, addBot, showCombo, parseToolCode, extractSayLines]);
 
   /* ── Effects ── */
   useEffect(() => { setResponseHandler(processOutputs); }, [processOutputs]);
@@ -356,6 +381,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     pendingSubtitleRef.current = null;
     comboCreatedRef.current = false;
     if (respondingTimerRef.current) clearTimeout(respondingTimerRef.current);
+    if (finalTimerRef.current) clearTimeout(finalTimerRef.current);
     resetGecx();
     setTimeout(() => showTyping(), 600);
     onReset?.();
