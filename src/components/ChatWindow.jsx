@@ -438,7 +438,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
               <div key={msg.id} className="acn-msg-enter" data-combo="true">
                 <AccountCarousel
                   payload={msg.payload}
-                  onCta={(v) => { addUser(v); showTyping(); gecxSend(v); }}
+                  onCta={(v) => { showTyping(); gecxSend(v); }}
                 />
               </div>
             );
