@@ -1,5 +1,5 @@
 export default function AccountCarousel({ payload, onCta }) {
-  const accounts = payload?.accounts || payload?.items || [];
+  const accounts = payload?.accounts || payload?.items || payload?.payments || [];
   const ctas = payload?.ctas || payload?.actions || [];
 
   const typeLabel = (id) => {
@@ -61,9 +61,9 @@ export default function AccountCarousel({ payload, onCta }) {
         WebkitOverflowScrolling: 'touch',
       }}>
         {accounts.map((acct, i) => {
-          const id = acct.account_id || acct.id || '';
+          const id = acct.account_id || acct.id || acct.payment_id || '';
           const color = typeColor(id);
-          const label = acct.account_type || typeLabel(id);
+          const label = acct.account_type || acct.payee_name || typeLabel(id);
           const balance = acct.balance ?? acct.current_balance ?? acct.amount ?? 0;
           const currency = acct.currency || 'CAD';
           const limit = acct.daily_limit;
