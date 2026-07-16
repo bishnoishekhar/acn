@@ -3,6 +3,7 @@ import { initGecx, resetGecx, gecxSend, setResponseHandler } from './gecx';
 import ComboCard from './ComboCard';
 import AcnFormWidget from './AcnFormWidget';
 import Carousel from './Carousel';
+import AccountCarousel from './AccountCarousel';
 
 // MODIFIED: Added a null check and a regex to remove code blocks
 function stripMarkdown(text) {
@@ -296,7 +297,9 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
         setActiveForm({ payload: p, id: uid() });
         setMessages((prev) => prev.map((m) => m.type === 'combo' ? { ...m, compact: true } : m));
       }
-      if (p.name === 'acn-payment-carousel') setCarousel(p);
+      if (p.name === 'acn-payment-carousel') {
+        setMessages((prev) => [...prev, { type: 'carousel', payload: p, id: uid() }]);
+      }
     });
   }, [removeTyping, clearTypingBubble, addBot, showCombo, parseToolCode, extractSayLines]);
 
@@ -341,7 +344,6 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
 
   const handleReset = useCallback(() => {
     setMessages([]);
-    setCarousel(null);
     setActiveForm(null);
     setSessionStarted(false);
     setInputVal('');
@@ -439,6 +441,14 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
             if (msg.type === 'typing') return (
               <div key={msg.id} className="acn-typing"><span /><span /><span /></div>
             );
+            if (msg.type === 'carousel') return (
+              <div key={msg.id} className="acn-msg-enter" data-combo="true">
+                <AccountCarousel
+                  payload={msg.payload}
+                  onCta={(v) => { addUser(v); showTyping(); gecxSend(v); }}
+                />
+              </div>
+            );
             if (msg.type === 'combo') return (
               <div key={msg.id} data-combo="true">
                 <ComboCard
@@ -459,8 +469,6 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
             <AcnFormWidget key={activeForm.id} payload={activeForm.payload} onSubmit={handleFormSubmit} />
           </div>
         )}
-
-        {carousel && <Carousel data={carousel} onCta={handleCarouselCta} onClose={() => setCarousel(null)} />}
 
         <div className="acn-input-bar">
           <button className="acn-input-icon-btn" title="Attach file" onClick={() => document.getElementById('acn-file-input').click()}>
