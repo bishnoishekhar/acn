@@ -4,12 +4,13 @@ import ComboCard from './ComboCard';
 import AcnFormWidget from './AcnFormWidget';
 import Carousel from './Carousel';
 import AccountCarousel from './AccountCarousel';
+import InsightCard from './InsightCard';
+import AmountInput from './AmountInput';
 
-// MODIFIED: Added a null check and a regex to remove code blocks
 function stripMarkdown(text) {
-  if (!text) return ''; // Prevent errors on empty text
+  if (!text) return '';
   return text
-    .replace(/```[a-z]*\n[\s\S]*?\n```/g, '') // Remove markdown code blocks
+    .replace(/```[a-z]*\n[\s\S]*?\n```/g, '')
     .replace(/\\\*\\\*(\[^\*\]+)\\\*\\\*/g, '$1')
     .replace(/\\\*(\[^\*\]+)\\\*/g, '$1')
     .replace(/^#{1,3}\\s+/gm, '')
@@ -33,10 +34,8 @@ function BotText({ text }) {
 let _idCounter = 0;
 const uid = () => ++_idCounter;
 
-// Strip leading emoji + whitespace before checking heading type
 const stripEmoji = (h) => h ? h.replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{27FF}\u{FE00}-\u{FE0F}\s]+/gu, '') : '';
 
-// True when heading means "user must type — show fallback tiles compact"
 const isFH = (h) => {
   if (!h) return false;
   const l = stripEmoji(h).toLowerCase();
@@ -66,7 +65,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
   const scrollToBottom = useCallback(() => {
     const snap = () => {
       if (!msgsRef.current) return;
-      const combo = msgsRef.current.querySelector('\[data-combo="true"\]:last-child');
+      const combo = msgsRef.current.querySelector('[data-combo="true"]:last-child');
       if (combo) {
         const cb = combo.offsetTop + combo.offsetHeight;
         const vb = msgsRef.current.scrollTop + msgsRef.current.clientHeight;
@@ -88,13 +87,10 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     const lines = clean.split('\n').filter(Boolean);
     const firstLine = lines[0];
     const restLines = lines.slice(1).join(' ');
-
     if (!pendingHeadingRef.current) {
       pendingHeadingRef.current = firstLine;
       if (restLines) pendingSubtitleRef.current = restLines;
     }
-
-    console.log('\[ACN\] addBot:', clean.slice(0, 60), '| heading:', pendingHeadingRef.current?.slice(0, 40));
     setMessages((prev) => [...prev, { type: 'bot', text: clean, id: uid() }]);
   }, []);
 
@@ -135,7 +131,6 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
         return prev;
       });
     }, 300);
-
     if (finalTimerRef.current) clearTimeout(finalTimerRef.current);
     finalTimerRef.current = setTimeout(() => {
       setIsResponding(false);
@@ -150,10 +145,10 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
       const fv = (str, key) => {
         const QK = "['\"]" + key + "['\"]";
         let m;
-        m = str.match(new RegExp(QK + '\\s\*[:=]\\s*"([^"]\*)"'));  if (m) return m[1];
-        m = str.match(new RegExp(QK + "\\s\*[:=]\\s\*'([^']\*)'"));  if (m) return m[1];
-        m = str.match(new RegExp('\\b' + key + "\\s\*=\\s\*'([^']\*)'"));  if (m) return m[1];
-        m = str.match(new RegExp('\\b' + key + '\\s\*=\\s*"([^"]\*)"')); if (m) return m[1];
+        m = str.match(new RegExp(QK + '\\s*[:=]\\s*"([^"]*)"'));  if (m) return m[1];
+        m = str.match(new RegExp(QK + "\\s*[:=]\\s*'([^']*)'"));  if (m) return m[1];
+        m = str.match(new RegExp('\\b' + key + "\\s*=\\s*'([^']*)'"));  if (m) return m[1];
+        m = str.match(new RegExp('\\b' + key + '\\s*=\\s*"([^"]*)"')); if (m) return m[1];
         return null;
       };
       const marked = text.replace(/\{(\s*['"]?content['"]?\s*[:=])/g, '\x00{$1');
@@ -180,12 +175,8 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
     const pendingSub = pendingSubtitleRef.current;
     pendingHeadingRef.current = null;
     pendingSubtitleRef.current = null;
-    console.log('[ACN] showCombo — pending:', pending?.slice(0, 50), '| sub:', pendingSub?.slice(0, 30), '| comboCreated:', comboCreatedRef.current);
-
     comboCreatedRef.current = true;
 
-    // Merge two tile lists without repeating an action (dedupe by content+utterance).
-    // Lets duplicate/re-delivered payloads collapse instead of stacking cards.
     const mergeActions = (existing, incoming) => {
       const key = (a) => `${a.content || ''}|${a.utterance || ''}`;
       const seen = new Set(existing.map(key));
@@ -196,17 +187,12 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
       if (forcedHeading) {
         return [...prev, { type: 'combo', heading: forcedHeading, subtitle: forcedSubtitle, actions, id: uid(), compact: isFH(forcedHeading) }];
       }
-
-      // CX streams follow-up quick_actions as their own output with no heading.
-      // Fold them into the combo we just built rather than spawning a duplicate
-      // card or cannibalizing an unrelated bot message.
       if (!pending) {
         const last = prev[prev.length - 1];
         if (last && last.type === 'combo') {
           return [...prev.slice(0, -1), { ...last, actions: mergeActions(last.actions, actions) }];
         }
       }
-
       if (pending) {
         const li = [...prev].reverse().findIndex((m) => m.type === 'bot' && m.text.startsWith(pending));
         if (li !== -1) {
@@ -216,9 +202,6 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
         }
         return [...prev, { type: 'combo', heading: pending, subtitle: pendingSub, actions, id: uid(), compact: isFH(pending) }];
       }
-
-      // No pending heading: promote the most recent bot bubble into a combo so the
-      // tiles sit under the text that introduced them.
       const li = [...prev].reverse().findIndex((m) => m.type === 'bot');
       if (li !== -1) {
         const ri = prev.length - 1 - li;
@@ -229,8 +212,6 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
         const without = prev.filter((_, i) => i !== ri);
         return [...without, { type: 'combo', heading, subtitle, actions, id: uid(), compact: isFH(heading) }];
       }
-
-      // Nothing to anchor to — render tiles only, don't invent placeholder copy.
       return [...prev, { type: 'combo', heading: summary || undefined, actions, id: uid(), compact: false }];
     });
   }, []);
@@ -242,7 +223,9 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
                o.payload.name === 'acn-form-input' ||
                o.payload.name === 'acn-payment-carousel' ||
                o.payload.name === 'acn-payee-selector' ||
-               o.payload.name === 'acn-payment-receipt';
+               o.payload.name === 'acn-payment-receipt' ||
+               o.payload.name === 'acn-insight-card' ||
+               o.payload.name === 'acn-amount-input';
       }
       if (!o.text) return false;
       const t = o.text;
@@ -253,19 +236,14 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
 
     if (!hasVisible) return;
 
-    console.log('\[ACN\] processOutputs:', outputs.map(o =>
-      o.text ? 'TEXT:' + o.text.slice(0, 60).replace(/\n/g, '↵')
-      : o.payload ? 'PAYLOAD:' + (o.payload.type || o.payload.name)
-      : 'other'
-    ));
-    
-    // MODIFIED: More robust logic for when to stop the typing indicator
     const hasFinalWidget = outputs.some(o => o.payload && (
       o.payload.type === 'quick_actions' ||
       o.payload.name === 'acn-form-input' ||
       o.payload.name === 'acn-payment-carousel' ||
       o.payload.name === 'acn-payee-selector' ||
-      o.payload.name === 'acn-payment-receipt'
+      o.payload.name === 'acn-payment-receipt' ||
+      o.payload.name === 'acn-insight-card' ||
+      o.payload.name === 'acn-amount-input'
     ));
     const hasOnlyText = outputs.every(o => o.text && !o.payload);
 
@@ -322,6 +300,12 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
       }
       if (p.name === 'acn-payment-carousel' || p.name === 'acn-payee-selector') {
         setMessages((prev) => [...prev, { type: 'carousel', payload: p, id: uid() }]);
+      }
+      if (p.name === 'acn-insight-card') {
+        setMessages((prev) => [...prev, { type: 'insight', payload: p, id: uid() }]);
+      }
+      if (p.name === 'acn-amount-input') {
+        setMessages((prev) => [...prev, { type: 'amount', payload: p, id: uid() }]);
       }
       if (p.name === 'acn-payment-receipt') {
         setMessages((prev) => [...prev, { type: 'receipt', payload: p, id: uid() }]);
@@ -415,7 +399,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
       <div style={{ position: 'fixed', bottom: 0, right: 0, visibility: 'hidden', height: 0, width: 0 }}>
         <chat-messenger
           id="gecx-messenger"
-          url-allowlist="\*"
+          url-allowlist="*"
           language-code="en"
           max-query-length="-1"
           style={{ visibility: 'hidden', height: 0, width: 0, display: 'block', position: 'fixed', bottom: 0, right: 0 }}
@@ -450,17 +434,21 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
         <div className="acn-messages" ref={msgsRef}>
           {messages.map((msg, idx) => {
             const isConsBot = msg.type === 'bot' && messages[idx - 1]?.type === 'bot';
+
             if (msg.type === 'bot') return (
               <div key={msg.id} className={`acn-bot-bubble acn-msg-enter${isConsBot ? ' acn-bot-consecutive' : ''}`}>
                 <BotText text={msg.text} />
               </div>
             );
+
             if (msg.type === 'user') return (
               <div key={msg.id} className="acn-user-bubble acn-msg-enter">{msg.text}</div>
             );
+
             if (msg.type === 'typing') return (
               <div key={msg.id} className="acn-typing"><span /><span /><span /></div>
             );
+
             if (msg.type === 'carousel') return (
               <div key={msg.id} className="acn-msg-enter" data-combo="true">
                 <AccountCarousel
@@ -469,6 +457,25 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
                 />
               </div>
             );
+
+            if (msg.type === 'insight') return (
+              <div key={msg.id} className="acn-msg-enter" data-combo="true">
+                <InsightCard
+                  payload={msg.payload}
+                  onCta={(v) => { addUser(v); showTyping(); gecxSend(v); }}
+                />
+              </div>
+            );
+
+            if (msg.type === 'amount') return (
+              <div key={msg.id} className="acn-msg-enter" data-combo="true">
+                <AmountInput
+                  payload={msg.payload}
+                  onSubmit={(v) => { addUser(v); showTyping(); gecxSend(v); }}
+                />
+              </div>
+            );
+
             if (msg.type === 'receipt') {
               const r = msg.payload || {};
               const amt = Number(r.amount);
@@ -483,6 +490,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
                 </div>
               );
             }
+
             if (msg.type === 'combo') return (
               <div key={msg.id} data-combo="true">
                 <ComboCard
@@ -494,6 +502,7 @@ export default function ChatWindow({ isOpen, onClose, onReset, intent }) {
                 />
               </div>
             );
+
             return null;
           })}
         </div>
