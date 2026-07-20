@@ -1,0 +1,13 @@
+
+  VITE v5.4.21  ready in 1315 ms
+
+  ➜  Local:   http://localhost:5173/acn-bank-demo/
+  ➜  Network: use --host to expose
+5:45:45 PM [vite] hmr update /src/components/ChatWindow.jsx
+5:46:08 PM [vite] hmr update /src/index.css
+5:46:18 PM [vite] hmr update /src/index.css
+5:46:27 PM [vite] hmr update /src/index.css
+5:46:47 PM [vite] hmr update /src/index.css
+5:47:23 PM [vite] hmr update /src/index.css
+5:52:12 PM [vite] hmr update /src/components/ChatWindow.jsx
+5:52:24 PM [vite] hmr update /src/index.css

@@ -72,16 +72,12 @@ footer span{font-size:11px;color:#B0A0C8;}
 
 /* ══════════════════════════════════════════════════════════════
    CHAT WINDOW — Accenture light theme
-   All classes below are scoped to .acn-chat-window or .acn-fab-*
-   so they never affect the bank website above.
 ══════════════════════════════════════════════════════════════ */
 
-/* ── CSS isolation ── */
 .acn-chat-window a{color:inherit !important;text-decoration:none !important;}
 .acn-chat-window p{margin:0;padding:0;}
 .acn-chat-window span{color:inherit;}
 
-/* ── Window shell ── */
 .acn-chat-window{
   position:fixed;bottom:24px;right:24px;
   width:420px;height:76vh;max-height:740px;min-height:500px;
@@ -94,12 +90,9 @@ footer span{font-size:11px;color:#B0A0C8;}
 }
 .acn-chat-window.closed{opacity:0;pointer-events:none;transform:translateY(16px);}
 
-/* ── Header ── */
 .acn-chat-header{
-  background:#fff;
-  border-bottom:1px solid #EBEBEB;
-  padding:12px 14px;
-  display:flex;align-items:center;gap:10px;flex-shrink:0;
+  background:#fff;border-bottom:1px solid #EBEBEB;
+  padding:12px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0;
 }
 .acn-chat-avatar{
   width:38px;height:38px;border-radius:50%;
@@ -114,49 +107,38 @@ footer span{font-size:11px;color:#B0A0C8;}
 @keyframes acnPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
 .acn-chat-header-btns{display:flex;gap:4px;margin-left:auto;}
 .acn-icon-btn{
-  width:30px;height:30px;border-radius:6px;
-  background:transparent;border:none;
+  width:30px;height:30px;border-radius:6px;background:transparent;border:none;
   display:flex;align-items:center;justify-content:center;
-  cursor:pointer;transition:background .15s;
-  color:#888;font-size:18px;line-height:1;
+  cursor:pointer;transition:background .15s;color:#888;font-size:18px;line-height:1;
 }
 .acn-icon-btn:hover{background:#F8F0FF;color:#A100FF;}
 
-/* ── Messages area ── */
 .acn-messages{
-  flex:1;overflow-y:auto;
-  padding:14px 13px 24px;
-  background:#F7F4FC;
-  display:flex;flex-direction:column;gap:8px;
+  flex:1;overflow-y:auto;padding:14px 13px 24px;
+  background:#F7F4FC;display:flex;flex-direction:column;gap:8px;
   min-height:0;height:0;scroll-behavior:auto;
 }
 .acn-messages::-webkit-scrollbar{width:3px;}
 .acn-messages::-webkit-scrollbar-thumb{background:#D1D1D1;border-radius:3px;}
 
-/* ── Message enter animation ── */
 @keyframes acnMsgIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .acn-msg-enter{animation:acnMsgIn .18s ease forwards;}
 
-/* ── Bot bubble ── */
 .acn-bot-bubble{
   background:#fff;border:1px solid #E8E0F3;
-  border-radius:4px 14px 14px 14px;
-  padding:11px 14px;
+  border-radius:4px 14px 14px 14px;padding:11px 14px;
   font-size:13.5px;font-weight:400;color:#140025 !important;
   line-height:1.6;max-width:82%;align-self:flex-start;
 }
 .acn-bot-consecutive{border-radius:14px;margin-top:-2px;}
 
-/* ── User bubble ── */
 .acn-user-bubble{
   background:#A100FF;color:#fff;
-  border-radius:14px 4px 14px 14px;
-  padding:10px 14px;
+  border-radius:14px 4px 14px 14px;padding:10px 14px;
   font-size:13.5px;font-weight:500;line-height:1.5;
   max-width:78%;align-self:flex-end;
 }
 
-/* ── Typing indicator ── */
 .acn-typing{
   background:#fff;border:1px solid #E8E8E8;
   border-radius:4px 14px 14px 14px;
@@ -178,51 +160,78 @@ footer span{font-size:11px;color:#B0A0C8;}
 .acn-combo-card{
   background:#fff;border:1px solid #E8E0F3;
   border-radius:4px 14px 14px 14px;
-  max-width:86%;align-self:flex-start;overflow:hidden;
+  max-width:96%;align-self:flex-start;overflow:hidden;
 }
 .acn-combo-text{padding:12px 14px 6px;font-size:13.5px;font-weight:600;color:#000;line-height:1.55;}
 .acn-combo-subtitle{padding:0 14px 8px;font-size:12px;font-weight:400;color:#666;line-height:1.5;}
-.acn-combo-tiles{padding:4px 10px 10px;display:flex;flex-direction:column;gap:6px;}
+.acn-combo-tiles{padding:4px 10px 10px;display:flex;flex-direction:row;flex-wrap:wrap;gap:6px;}
+
 .acn-tile{
-  background:#fff;border:1px solid #EBEBEB;border-radius:10px;
-  padding:10px 12px;cursor:pointer;
-  display:flex;align-items:center;gap:10px;
-  width:100%;text-align:left;
+  background:#fff;border:1px solid #EBEBEB;border-radius:20px;
+  padding:7px 14px;cursor:pointer;
+  display:flex;align-items:center;gap:7px;
+  width:auto;text-align:left;
   transition:border-color .15s,background .15s,transform .1s;
 }
 .acn-tile:hover{border-color:#A100FF;background:#FDF8FF;transform:translateY(-1px);}
 .acn-tile:active{transform:translateY(0);}
-.acn-tile-icon{
-  font-size:16px;width:32px;height:32px;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;
-  background:#F8F0FF;border-radius:8px;line-height:1;
-}
-.acn-tile-body{flex:1;min-width:0;}
-.acn-tile-title{font-size:13px;font-weight:600;color:#000 !important;display:block;line-height:1.3;}
-.acn-tile-desc{font-size:11.5px;color:#777 !important;display:block;line-height:1.3;margin-top:1px;}
-.acn-tile-chev{font-size:18px;color:#CCCCCC;flex-shrink:0;line-height:1;}
+.acn-tile-icon{font-size:14px;line-height:1;flex-shrink:0;}
+.acn-tile-title{font-size:13px;font-weight:600;color:#000 !important;line-height:1.3;white-space:nowrap;}
 
 /* ── Compact tiles ── */
 .acn-combo-card.compact .acn-combo-text{padding:10px 13px 4px;font-size:13px;}
 .acn-combo-card.compact .acn-combo-tiles{padding:2px 8px 8px;gap:5px;}
-.acn-combo-card.compact .acn-tile{padding:8px 10px;border-radius:8px;gap:8px;}
-.acn-combo-card.compact .acn-tile-icon{width:26px;height:26px;font-size:14px;border-radius:7px;}
+.acn-combo-card.compact .acn-tile{padding:6px 12px;border-radius:16px;}
 .acn-combo-card.compact .acn-tile-title{font-size:12.5px;}
-.acn-combo-card.compact .acn-tile-chev{font-size:16px;}
+
+/* ── Nudge card (Tier 2 contextual intelligence) ── */
+.acn-nudge-card{
+  display:flex;align-items:flex-start;gap:10px;
+  border-radius:12px;padding:12px 14px;
+  max-width:86%;align-self:flex-start;margin-bottom:4px;
+}
+.acn-nudge-icon{font-size:18px;flex-shrink:0;margin-top:1px;line-height:1;}
+.acn-nudge-body{flex:1;min-width:0;}
+.acn-nudge-message{font-size:13px;line-height:1.5;font-weight:500;margin-bottom:10px;}
+.acn-nudge-btn{
+  border:none;border-radius:8px;padding:7px 14px;
+  font-size:12.5px;font-weight:600;cursor:pointer;color:#fff;
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:'DM Sans',-apple-system,sans-serif;
+  transition:opacity .15s,transform .1s;
+}
+.acn-nudge-btn:hover{opacity:.88;transform:translateY(-1px);}
+.acn-nudge-btn:active{transform:translateY(0);}
+.acn-nudge-recurring,.acn-nudge-schedule{background:#F5F3FF;border:1px solid #C4B5FD;}
+.acn-nudge-recurring .acn-nudge-message,.acn-nudge-schedule .acn-nudge-message{color:#5B21B6;}
+.acn-nudge-recurring .acn-nudge-btn,.acn-nudge-schedule .acn-nudge-btn{background:#6D28D9;}
+.acn-nudge-savings{background:#F0FDF4;border:1px solid #86EFAC;}
+.acn-nudge-savings .acn-nudge-message{color:#166534;}
+.acn-nudge-savings .acn-nudge-btn{background:#15803D;}
+.acn-nudge-cashflow{background:#FFFBEB;border:1px solid #FCD34D;}
+.acn-nudge-cashflow .acn-nudge-message{color:#92400E;}
+.acn-nudge-cashflow .acn-nudge-btn{background:#B45309;}
+.acn-nudge-bill{background:#EFF6FF;border:1px solid #BFDBFE;}
+.acn-nudge-bill .acn-nudge-message{color:#1E40AF;}
+.acn-nudge-bill .acn-nudge-btn{background:#2563EB;}
+.acn-nudge-travel{background:#F0F9FF;border:1px solid #BAE6FD;}
+.acn-nudge-travel .acn-nudge-message{color:#075985;}
+.acn-nudge-travel .acn-nudge-btn{background:#0284C7;}
+.acn-nudge-security{background:#FFF1F2;border:1px solid #FECDD3;}
+.acn-nudge-security .acn-nudge-message{color:#9F1239;}
+.acn-nudge-security .acn-nudge-btn{background:#BE123C;}
+.acn-nudge-default{background:#F8F9FA;border:1px solid #E2E8F0;}
+.acn-nudge-default .acn-nudge-message{color:#374151;}
+.acn-nudge-default .acn-nudge-btn{background:#4B5563;}
 
 /* ── Receipt ── */
 .acn-receipt{
-  background:#fff;border:1px solid #C8EFD6;
-  border-top:3px solid #16A34A;
-  border-radius:4px 14px 14px 14px;
-  padding:14px 16px;max-width:90%;align-self:flex-start;
+  background:#fff;border:1px solid #C8EFD6;border-top:3px solid #16A34A;
+  border-radius:4px 14px 14px 14px;padding:14px 16px;max-width:90%;align-self:flex-start;
 }
 .acn-receipt-check{
-  width:32px;height:32px;border-radius:50%;
-  background:#16A34A;color:#fff;
-  font-size:16px;font-weight:700;
-  display:flex;align-items:center;justify-content:center;
-  margin-bottom:8px;
+  width:32px;height:32px;border-radius:50%;background:#16A34A;color:#fff;
+  font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-bottom:8px;
 }
 .acn-receipt-title{font-size:14px;font-weight:700;color:#000;margin-bottom:10px;}
 .acn-receipt-row{
@@ -236,41 +245,32 @@ footer span{font-size:11px;color:#B0A0C8;}
 /* ── Input bar ── */
 .acn-input-bar{
   background:#fff;border-top:1px solid #EBEBEB;
-  padding:10px 12px;
-  display:flex;align-items:center;gap:6px;flex-shrink:0;
+  padding:10px 12px;display:flex;align-items:center;gap:6px;flex-shrink:0;
 }
 .acn-input{
-  flex:1;background:#F5F5F5;
-  border:1px solid #E8E8E8;border-radius:20px;
+  flex:1;background:#F5F5F5;border:1px solid #E8E8E8;border-radius:20px;
   padding:9px 14px;font-size:13px;
   font-family:'DM Sans',-apple-system,sans-serif;
-  color:#000;outline:none;
-  transition:border-color .15s,background .15s;
+  color:#000;outline:none;transition:border-color .15s,background .15s;
 }
 .acn-input:focus{border-color:#A100FF;background:#fff;}
 .acn-input::placeholder{color:#BBBBBB;}
 .acn-input:disabled{opacity:.6;cursor:not-allowed;}
 
-/* Icon buttons — attachment and voice */
 .acn-input-icon-btn{
-  width:34px;height:34px;border-radius:50%;
-  background:transparent;border:none;color:#AAAAAA;
-  display:flex;align-items:center;justify-content:center;
-  cursor:pointer;flex-shrink:0;
+  width:34px;height:34px;border-radius:50%;background:transparent;border:none;color:#AAAAAA;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
   transition:background .15s,color .15s;
 }
 .acn-input-icon-btn:hover{background:#F8F0FF;color:#A100FF;}
 .acn-input-icon-btn.active{color:#A100FF;background:#F0E0FF;}
 .acn-input-icon-btn:disabled{opacity:.4;cursor:not-allowed;}
 
-/* Send button */
 .acn-send-btn{
   width:34px;height:34px;border-radius:50%;border:none;
   background:#A100FF;color:#fff;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;
-  transition:background .15s,transform .1s;
-  box-shadow:0 2px 8px rgba(161,0,255,.3);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  transition:background .15s,transform .1s;box-shadow:0 2px 8px rgba(161,0,255,.3);
 }
 .acn-send-btn:hover{background:#8A00E0;transform:scale(1.05);}
 .acn-send-btn:active{transform:scale(0.96);}
@@ -279,16 +279,14 @@ footer span{font-size:11px;color:#B0A0C8;}
 /* ── FAB ── */
 .acn-fab-wrapper{position:fixed;bottom:24px;right:24px;z-index:10000;}
 .acn-fab{
-  width:56px;height:56px;border-radius:50%;
-  background:#A100FF;
+  width:56px;height:56px;border-radius:50%;background:#A100FF;
   box-shadow:0 4px 16px rgba(161,0,255,.4);
   display:flex;align-items:center;justify-content:center;
   cursor:pointer;transition:transform .2s,background .15s;position:relative;
 }
 .acn-fab:hover{transform:scale(1.06);background:#8A00E0;}
 .acn-fab-badge{
-  position:absolute;top:-2px;right:-2px;
-  width:18px;height:18px;border-radius:50%;
+  position:absolute;top:-2px;right:-2px;width:18px;height:18px;border-radius:50%;
   background:#EF4444;border:2px solid #fff;
   display:flex;align-items:center;justify-content:center;
   font-size:10px;font-weight:700;color:#fff;
@@ -296,40 +294,29 @@ footer span{font-size:11px;color:#B0A0C8;}
 
 /* ── Tooltip ── */
 .acn-tooltip{
-  display:none;position:absolute;bottom:68px;right:0;
-  width:240px;background:#fff;
+  display:none;position:absolute;bottom:68px;right:0;width:240px;background:#fff;
   border:1px solid #E8E8E8;border-top:2px solid #A100FF;
-  border-radius:12px 12px 4px 12px;
-  padding:14px;box-shadow:0 4px 20px rgba(0,0,0,.10);
+  border-radius:12px 12px 4px 12px;padding:14px;box-shadow:0 4px 20px rgba(0,0,0,.10);
 }
 .acn-tooltip.show{display:block;animation:tooltipIn .25s ease;}
 @keyframes tooltipIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .acn-tooltip-title{font-size:13px;font-weight:700;color:#000;margin-bottom:5px;}
 .acn-tooltip-text{font-size:12px;color:#666;line-height:1.55;margin-bottom:10px;}
 .acn-tooltip-btn{
-  width:100%;padding:8px;border-radius:6px;
-  background:#A100FF;color:#fff;
-  font-size:12px;font-weight:600;margin-bottom:6px;
-  border:none;cursor:pointer;font-family:inherit;
+  width:100%;padding:8px;border-radius:6px;background:#A100FF;color:#fff;
+  font-size:12px;font-weight:600;margin-bottom:6px;border:none;cursor:pointer;font-family:inherit;
 }
 .acn-tooltip-btn:hover{background:#8A00E0;}
-.acn-tooltip-dismiss{
-  width:100%;padding:5px;background:none;border:none;
-  color:#AAAAAA;font-size:11px;cursor:pointer;font-family:inherit;
-}
+.acn-tooltip-dismiss{width:100%;padding:5px;background:none;border:none;color:#AAAAAA;font-size:11px;cursor:pointer;font-family:inherit;}
 .tooltip-arrow{
-  position:absolute;bottom:-6px;right:20px;
-  width:10px;height:10px;background:#fff;
-  border-right:1px solid #E8E8E8;border-bottom:1px solid #E8E8E8;
-  transform:rotate(45deg);
+  position:absolute;bottom:-6px;right:20px;width:10px;height:10px;background:#fff;
+  border-right:1px solid #E8E8E8;border-bottom:1px solid #E8E8E8;transform:rotate(45deg);
 }
 
-/* ── Carousel (Carousel.jsx) ── */
+/* ── Carousel ── */
 .acn-carousel-wrap{
-  background:#fff;border:1px solid #E8E8E8;
-  border-top:3px solid #A100FF;
-  border-radius:4px 14px 14px 14px;
-  overflow:hidden;max-width:86%;align-self:flex-start;
+  background:#fff;border:1px solid #E8E8E8;border-top:3px solid #A100FF;
+  border-radius:4px 14px 14px 14px;overflow:hidden;max-width:86%;align-self:flex-start;
 }
 .acn-carousel-header{
   padding:12px 14px;border-bottom:1px solid #EBEBEB;
@@ -344,8 +331,7 @@ footer span{font-size:11px;color:#B0A0C8;}
 .acn-card{
   min-width:156px;max-width:174px;flex-shrink:0;
   background:#FAFAFA;border:1px solid #EBEBEB;
-  border-radius:12px;padding:12px;
-  display:flex;flex-direction:column;gap:7px;
+  border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:7px;
 }
 .acn-card-name{font-size:12px;font-weight:600;color:#000;line-height:1.35;}
 .acn-card-amount{font-size:19px;font-weight:700;color:#000;letter-spacing:-.4px;}
@@ -359,18 +345,13 @@ footer span{font-size:11px;color:#B0A0C8;}
 .acn-badge-available{background:#F8F0FF;color:#7C3AED;border-color:#DDD6FE;}
 .acn-badge-scheduled{background:#EFF6FF;color:#2563EB;border-color:#BFDBFE;}
 
-.acn-cta-btn{
-  margin-top:auto;padding:7px 12px;border-radius:7px;
-  font-size:11.5px;font-weight:600;cursor:pointer;
-  border:none;font-family:inherit;transition:background .15s;
-}
+.acn-cta-btn{margin-top:auto;padding:7px 12px;border-radius:7px;font-size:11.5px;font-weight:600;cursor:pointer;border:none;font-family:inherit;transition:background .15s;}
 .acn-cta-active{background:#A100FF;color:#fff;}
 .acn-cta-active:hover{background:#8A00E0;}
 .acn-cta-inactive{background:#F0F0F0;color:#AAAAAA;cursor:default;}
 
 .acn-carousel-footer{
-  padding:7px 14px;border-top:1px solid #EBEBEB;
-  background:#FAFAFA;
+  padding:7px 14px;border-top:1px solid #EBEBEB;background:#FAFAFA;
   display:flex;align-items:center;gap:5px;justify-content:center;
 }
 .acn-powered-dot{width:5px;height:5px;border-radius:50%;background:#A100FF;}
@@ -378,10 +359,8 @@ footer span{font-size:11px;color:#B0A0C8;}
 
 /* ── Form widget ── */
 .acn-form-widget{
-  background:#fff;border:1px solid #E8E8E8;
-  border-top:3px solid #A100FF;
-  border-radius:4px 14px 14px 14px;
-  padding:14px 16px 12px;max-width:98%;align-self:flex-start;
+  background:#fff;border:1px solid #E8E8E8;border-top:3px solid #A100FF;
+  border-radius:4px 14px 14px 14px;padding:14px 16px 12px;max-width:98%;align-self:flex-start;
 }
 .acn-form-title{font-size:13.5px;font-weight:700;color:#000;margin-bottom:4px;}
 .acn-form-subtitle{font-size:12px;color:#666;margin-bottom:12px;line-height:1.45;}
@@ -390,10 +369,8 @@ footer span{font-size:11px;color:#B0A0C8;}
 .acn-form-label{font-size:11.5px;font-weight:600;color:#000;}
 .acn-form-req{color:#A100FF;}
 .acn-form-input-el{
-  background:#F5F5F5;border:1px solid #E0E0E0;border-radius:8px;
-  padding:8px 12px;font-size:13px;
-  font-family:'DM Sans',-apple-system,sans-serif;
-  color:#000;outline:none;
+  background:#F5F5F5;border:1px solid #E0E0E0;border-radius:8px;padding:8px 12px;font-size:13px;
+  font-family:'DM Sans',-apple-system,sans-serif;color:#000;outline:none;
   transition:border-color .15s,background .15s;width:100%;
 }
 .acn-form-input-el:focus{border-color:#A100FF;background:#fff;}
@@ -402,22 +379,17 @@ footer span{font-size:11px;color:#B0A0C8;}
 .acn-form-hint{font-size:10.5px;color:#AAAAAA;line-height:1.4;}
 .acn-form-error{font-size:10.5px;color:#DC2626;font-weight:500;}
 .acn-form-cta{
-  width:100%;padding:9px;border-radius:8px;
-  background:#A100FF;color:#fff;
-  font-size:13px;font-weight:700;
-  font-family:'DM Sans',-apple-system,sans-serif;
-  cursor:pointer;border:none;
-  transition:background .15s,opacity .15s;
+  width:100%;padding:9px;border-radius:8px;background:#A100FF;color:#fff;
+  font-size:13px;font-weight:700;font-family:'DM Sans',-apple-system,sans-serif;
+  cursor:pointer;border:none;transition:background .15s,opacity .15s;
 }
 .acn-form-cta:hover:not(:disabled){background:#8A00E0;}
 .acn-form-cta.submitted,.acn-form-cta:disabled{opacity:.6;cursor:not-allowed;}
 
 /* ── Payee selector ── */
 .acn-payee-selector{
-  background:#fff;border:1px solid #E8E8E8;
-  border-top:3px solid #A100FF;
-  border-radius:4px 14px 14px 14px;
-  padding:12px 14px;max-width:98%;align-self:flex-start;
+  background:#fff;border:1px solid #E8E8E8;border-top:3px solid #A100FF;
+  border-radius:4px 14px 14px 14px;padding:12px 14px;max-width:98%;align-self:flex-start;
 }
 .acn-payee-title{font-size:13.5px;font-weight:700;color:#000;margin-bottom:4px;}
 .acn-payee-subtitle{font-size:12px;color:#666;margin-bottom:10px;}
@@ -431,16 +403,14 @@ footer span{font-size:11px;color:#B0A0C8;}
 .acn-payee-item:hover{border-color:#A100FF;background:#FDF8FF;}
 .acn-payee-item-left{display:flex;align-items:center;gap:10px;}
 .acn-payee-avatar{
-  width:32px;height:32px;border-radius:50%;
-  background:#F8F0FF;color:#A100FF;
-  display:flex;align-items:center;justify-content:center;
-  font-size:13px;font-weight:700;flex-shrink:0;
+  width:32px;height:32px;border-radius:50%;background:#F8F0FF;color:#A100FF;
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;
 }
 .acn-payee-name{font-size:13px;font-weight:600;color:#000;}
 .acn-payee-acct{font-size:11px;color:#888;margin-top:1px;}
 .acn-payee-arrow{font-size:18px;color:#D0D0D0;}
 
-/* ── AcnPaymentReceipt status badges ── */
+/* ── Receipt status badges ── */
 .acn-receipt-status{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:5px 12px;border-radius:20px;}
 .receipt-status-success{background:#ECFDF5;color:#16A34A;}
 .receipt-status-blocked{background:#F8F0FF;color:#7000BB;}

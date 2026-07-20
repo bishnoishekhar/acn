@@ -16,13 +16,7 @@ export default function ComboCard({ heading, subtitle, actions, onSelect, compac
           return (
             <button key={i} className="acn-tile" onClick={() => onSelect(action)}>
               {icon && <span className="acn-tile-icon">{icon}</span>}
-              <span className="acn-tile-body">
-                <span className="acn-tile-title">{label}</span>
-                {action.description && !compact && (
-                  <span className="acn-tile-desc">{action.description}</span>
-                )}
-              </span>
-              <span className="acn-tile-chev" aria-hidden="true">›</span>
+              <span className="acn-tile-title">{label}</span>
             </button>
           );
         })}
